@@ -1,0 +1,832 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>管理后台</title>
+<style>
+:root{
+  color-scheme:light;
+  --surface:#fff;--ink:#161618;--muted:#62626d;--line:#e4e4e7;--soft:#f7f7f8;
+  --badge:#f4f4f5;--green:#24c19a;--red:#f5785c;--amber:#fbbf24;--blue:#4f8ef7;
+  font-family:Inter,ui-sans-serif,-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+}
+:root[data-theme=dark]{color-scheme:dark;--surface:#111c2e;--ink:#e7edf6;--muted:#a8b5c9;--line:#2b3b52;--soft:#213047;--badge:#23334a}
+*{box-sizing:border-box}
+body{margin:0;background:var(--surface);color:var(--ink);font-size:14px;line-height:1.5;font-family:inherit}
+.shell{width:min(980px,calc(100% - 48px));margin:0 auto;padding:20px 0 40px}
+h1{font-size:22px;margin:0 0 4px}
+.sub{color:var(--muted);font-size:13px;margin-bottom:18px}
+h2{font-size:15px;margin:22px 0 10px}
+.card{border:1px solid var(--line);border-radius:8px;padding:14px 16px;margin-bottom:12px}
+label{display:block;font-size:12px;color:var(--muted);margin-bottom:4px}
+input,select,textarea{width:100%;padding:7px 9px;border:1px solid var(--line);border-radius:6px;background:var(--surface);color:var(--ink);font:inherit}
+textarea{min-height:80px;resize:vertical}
+.row{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px}
+button{padding:7px 14px;border-radius:6px;border:1px solid var(--line);background:var(--badge);color:var(--ink);font:inherit;cursor:pointer}
+button.primary{background:var(--ink);color:var(--surface);border-color:var(--ink)}
+button.danger{color:var(--red);border-color:var(--red)}
+button:hover{opacity:.85}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th,td{text-align:left;padding:7px 8px;border-bottom:1px solid var(--line);vertical-align:top}
+th{color:var(--muted);font-weight:500;font-size:12px}
+.tag{display:inline-block;padding:1px 7px;border-radius:4px;background:var(--badge);font-size:11px;color:var(--muted)}
+.tag.ok{background:rgba(36,193,154,.15);color:#13896a}
+.tag.bad{background:rgba(245,120,92,.15);color:#b91c1c}
+.tag.maintenance{background:rgba(79,142,247,.15);color:#2465c8}
+:root[data-theme=dark] .tag.maintenance{color:#9bc1ff}
+.maintenance-scope{border:1px solid var(--line);border-radius:6px;margin:12px 0;padding:10px 12px}
+.maintenance-scope legend{font-size:12px;color:var(--muted);padding:0 4px}
+.maintenance-scope .check{margin:0 0 10px}
+#maintenance-channels{min-height:110px}
+.msg{font-size:13px;margin-top:8px;min-height:18px}
+.msg.err{color:var(--red)}
+.msg.ok{color:#13896a}
+#login{max-width:420px;margin:80px auto}
+.hidden,[hidden]{display:none!important}
+a{color:inherit}
+input,select,textarea,.row>div,.card,.shell,td{min-width:0}
+input[type=checkbox]{width:auto;accent-color:var(--green)}
+.check{display:flex;align-items:center;gap:8px;color:var(--ink);font-size:14px;margin:12px 0}
+button:disabled{opacity:.55;cursor:wait}
+button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible{outline:2px solid var(--green);outline-offset:2px}
+input:read-only{background:var(--soft)}
+h1,h2,.sub,.msg,td,.help{overflow-wrap:anywhere}
+.msg{white-space:pre-wrap}
+.msg.err{color:#b42318}
+:root[data-theme=dark] .msg.err,:root[data-theme=dark] .tag.bad{color:#ffab98}
+:root[data-theme=dark] .msg.ok,:root[data-theme=dark] .tag.ok{color:#57d9b7}
+.toolbar,.actions,.section-heading{display:flex;align-items:center;flex-wrap:wrap;gap:8px}
+.toolbar{margin-bottom:18px;justify-content:flex-end}
+.panel-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.section-heading{justify-content:space-between;margin:22px 0 10px}
+.section-heading h2{margin:0}
+.help{color:var(--muted);font-size:12px;margin:6px 0 0}
+.error-box{border:1px solid var(--red);border-radius:6px;padding:10px 12px;margin:12px 0;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.error-box span{flex:1;min-width:0;overflow-wrap:anywhere}
+.actions button{font-size:12px;padding:5px 8px}
+.data-table{table-layout:fixed}
+.data-table th:last-child{width:30%}
+.data-table td>div{min-width:0}
+.announcement-body,.incident-reason{white-space:pre-wrap;overflow-wrap:anywhere}
+@media(max-width:700px){
+  .shell{width:calc(100% - 24px);padding-top:14px}
+  #login{margin:30px auto}
+  .row{grid-template-columns:minmax(0,1fr)}
+  .card{padding:12px}
+  .toolbar{justify-content:flex-start}
+  .data-table,.data-table tbody,.data-table tr,.data-table td{display:block;width:100%}
+  .data-table thead{display:none}
+  .data-table tr{padding:6px 0;border-bottom:1px solid var(--line)}
+  .data-table tr:last-child{border-bottom:0}
+  .data-table td{display:grid;grid-template-columns:48px minmax(0,1fr);gap:8px;border:0;padding:4px 0}
+  .data-table td:before{content:attr(data-label);color:var(--muted);font-size:12px}
+}
+</style>
+</head>
+<body>
+<div class="shell">
+  <div class="toolbar"><a href="/">公开状态页</a><button id="theme-btn" type="button">切换主题</button></div>
+  <form id="login" class="card">
+    <h1>管理后台</h1>
+    <div class="sub">输入管理员令牌（config.yaml 的 admin.token），仅在当前浏览器会话中保存。</div>
+    <label for="token">管理员令牌</label>
+    <input id="token" type="password" placeholder="admin token" autocomplete="current-password" required>
+    <div style="margin-top:10px"><button class="primary" id="login-btn" type="submit">登录</button></div>
+    <div class="msg err" id="login-msg" role="status" aria-live="polite"></div>
+  </form>
+
+  <main id="panel" class="hidden">
+    <div class="panel-heading">
+      <div><h1>管理后台</h1><div class="sub" id="panel-sub"></div></div>
+      <div class="actions"><button id="panel-refresh" type="button">刷新数据</button><button id="logout-btn" type="button">退出登录</button></div>
+    </div>
+
+    <h2>监控渠道</h2>
+    <div id="channels-error" class="error-box" role="alert" hidden><span></span><button id="channels-retry" type="button">重试</button></div>
+    <div id="channels-msg" class="msg" role="status" aria-live="polite"></div>
+    <div id="channels"></div>
+
+    <h2 id="ch-form-title">新增 / 编辑渠道</h2>
+    <form class="card" id="ch-form">
+      <div class="row">
+        <div><label for="ch-id">ID</label><input id="ch-id" placeholder="my-channel" required></div>
+        <div><label for="ch-name">名称</label><input id="ch-name" placeholder="My Channel" required></div>
+        <div><label for="ch-group">分组</label><input id="ch-group" placeholder="默认"></div>
+        <div><label for="ch-type">类型</label>
+          <select id="ch-type"><option value="openai">openai</option><option value="http">http</option>
+          <option value="tcp">tcp（端口/横幅）</option>
+          <option value="minecraft">minecraft（玩家数）</option>
+          <option value="steam">steam/Source（玩家数）</option>
+          <option value="udp">udp（自定义包）</option>
+          <option value="icmp">icmp（ping）</option>
+          <option value="dns">dns（解析）</option>
+          <option value="mock">mock</option></select>
+        </div>
+      </div>
+      <div style="margin-top:10px"><label for="ch-sort">排序（正整数越小越靠前；0 保留原顺序，新渠道默认 1000）</label><input id="ch-sort" type="number" min="0" max="2147483647" step="1" value="0" required></div>
+      <label class="check" for="ch-enabled" style="margin-top:10px"><input id="ch-enabled" type="checkbox" checked>启用此渠道</label>
+      <div><label for="ch-config">配置 JSON</label><textarea id="ch-config" aria-describedby="ch-config-help" spellcheck="false" placeholder='{"base_url":"https://api.example.com/v1","api_key":"env:MY_KEY","model":"gpt-4o-mini","interval_seconds":60}'></textarea></div>
+      <p class="help" id="ch-config-help">独立探测间隔：在此 JSON 中设置 <code>"interval_seconds": 60</code>（秒，至少 10）；省略或设为 0 使用全局间隔。密钥可填写 <code>"api_key": "env:MY_KEY"</code>，编辑时保留环境变量引用，探测时才解析。游戏服常用配置——minecraft：<code>{"host":"mc.example.com","port":25565}</code>；steam：<code>{"host":"1.2.3.4","port":27015}</code>；udp（如 Bedrock）：<code>{"host":"h","port":19132,"send":"\\x62...","expect":"MCPE"}</code>；ssh 横幅：<code>{"host":"h","port":22,"expect":"SSH-2.0"}</code>。</p>
+      <div class="actions" style="margin-top:10px"><button class="primary" id="ch-save" type="submit">保存</button><button id="ch-new" type="button">新建 / 清空</button></div>
+      <div class="msg" id="ch-msg" role="status" aria-live="polite"></div>
+    </form>
+
+    <h2>告警</h2>
+    <div class="card">
+      <p class="help" style="margin:0 0 10px">支持通用 Webhook、Telegram、钉钉、飞书、企业微信、Discord、Slack、Bark 和 ntfy。接收端在配置文件中设置，重启后生效。</p>
+      <div id="alert-receivers" class="help" role="status">正在读取通知配置…</div>
+      <div class="row" style="margin:12px 0">
+        <div><label for="alert-receiver">测试接收端</label><select id="alert-receiver"><option value="">全部已配置接收端</option></select></div>
+      </div>
+      <div class="actions"><button id="alert-test" type="button" disabled>发送测试告警</button><button id="alert-refresh" type="button">刷新通知配置</button></div>
+      <div class="msg" id="alert-msg" role="status" aria-live="polite"></div>
+      <div id="alert-results" aria-live="polite"></div>
+    </div>
+
+    <section id="maintenance-section" aria-labelledby="maintenance-heading">
+      <div class="section-heading"><h2 id="maintenance-heading">维护窗口</h2><button id="maintenance-refresh" type="button">刷新维护窗口</button></div>
+      <div class="card">
+        <p class="help" style="margin:0 0 12px">为游戏服务器或其他服务安排维护。窗口期间显示维护标识；可用率与探测历史仍保留真实结果。</p>
+        <form id="maintenance-form">
+          <div><label for="maintenance-title">维护标题</label><input id="maintenance-title" required></div>
+          <div style="margin-top:10px"><label for="maintenance-body">维护说明（纯文本）</label><textarea id="maintenance-body"></textarea></div>
+          <fieldset class="maintenance-scope">
+            <legend>维护范围</legend>
+            <label class="check" for="maintenance-all"><input id="maintenance-all" type="checkbox">所有服务（包括维护期间新增的渠道）</label>
+            <label for="maintenance-channels">指定渠道（可多选）</label>
+            <select id="maintenance-channels" multiple size="5" aria-describedby="maintenance-scope-help maintenance-scope-summary"></select>
+            <p class="help" id="maintenance-scope-help">按住 Ctrl / Command 可多选，Shift 可连续选择；未勾选所有服务时至少选择一个渠道。</p>
+            <p class="help" id="maintenance-scope-summary" role="status" aria-live="polite">尚未选择渠道</p>
+          </fieldset>
+          <div class="row">
+            <div><label for="maintenance-start">开始时间（本地时间，可留空立即生效）</label><input id="maintenance-start" type="datetime-local" aria-describedby="maintenance-time-help"></div>
+            <div><label for="maintenance-end">结束时间（本地时间，必填）</label><input id="maintenance-end" type="datetime-local" required aria-describedby="maintenance-time-help"></div>
+          </div>
+          <p class="help" id="maintenance-time-help">结束必须晚于开始且尚未到达，单次维护最长 30 天。开始留空表示立即生效。</p>
+          <div class="actions" style="margin-top:10px"><button class="primary" id="maintenance-save" type="submit">创建维护窗口</button><button id="maintenance-new" type="button">清空</button></div>
+          <div id="maintenance-msg" class="msg" role="status" aria-live="polite"></div>
+        </form>
+        <div id="maintenance-error" class="error-box" role="alert" hidden><span></span><button id="maintenance-retry" type="button">重试</button></div>
+        <div id="maintenance-list" style="margin-top:12px"></div>
+      </div>
+    </section>
+
+    <h2>动态</h2>
+    <div class="card">
+      <form id="dyn-form">
+        <div class="row">
+          <div><label for="dyn-kind">类型</label>
+            <select id="dyn-kind">
+              <option value="notice">公告</option>
+              <option value="maintenance">维护</option>
+              <option value="incident">故障</option>
+            </select>
+          </div>
+          <div><label for="dyn-state">状态</label>
+            <select id="dyn-state">
+              <option value="published">已发布</option>
+              <option value="active">进行中</option>
+              <option value="resolved">已解决</option>
+            </select>
+          </div>
+          <div><label for="dyn-pinned">置顶</label>
+            <select id="dyn-pinned"><option value="false">否</option><option value="true">是</option></select>
+          </div>
+          <div><label for="dyn-services">影响范围（逗号分隔）</label><input id="dyn-services" placeholder="GPT, 官网"></div>
+        </div>
+        <div style="margin-top:10px"><label for="dyn-title">标题</label><input id="dyn-title" required></div>
+        <div style="margin-top:10px"><label for="dyn-body">正文（支持简单 Markdown）</label><textarea id="dyn-body" style="min-height:120px"></textarea></div>
+        <div class="actions" style="margin-top:10px">
+          <button class="primary" id="dyn-save" type="submit">发布动态</button>
+          <button id="dyn-new" type="button">新建 / 清空</button>
+        </div>
+        <div class="msg" id="dyn-msg" role="status" aria-live="polite"></div>
+      </form>
+      <div id="dyn-error" class="error-box" role="alert" hidden><span></span><button id="dyn-retry" type="button">重试</button></div>
+      <div id="dyn-list" style="margin-top:12px"></div>
+    </div>
+  </main>
+</div>
+
+<script>
+"use strict";
+const $ = (s) => document.querySelector(s);
+let token = "";
+try { token = sessionStorage.getItem("adminToken") || ""; } catch { /* Login still works without storage. */ }
+let session = 0;
+let channels = [];
+let dynamics = [];
+let maintenance = [];
+let maintenanceBusy = false;
+const pending = new Set();
+const loads = {};
+const esc = (v) => String(v ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const fmtTime = (ts) => {
+  if (!Number.isFinite(ts) || ts <= 0) return "—";
+  const date = new Date(ts * 1000);
+  return Number.isNaN(date.getTime()) ? "—" : date.toLocaleString("zh-CN", { hour12: false });
+};
+const fmtLat = (ms) => Number.isFinite(ms) ? `${Math.round(ms)} ms` : "—";
+const sourceName = (i) => i.source === "manual" ? "手动" : "自动";
+
+function rememberToken(value) {
+  try {
+    if (value) sessionStorage.setItem("adminToken", value);
+    else sessionStorage.removeItem("adminToken");
+  } catch { /* Keep the token in memory for this page only. */ }
+}
+
+function setMsg(el, text, ok = false) {
+  el.textContent = text;
+  el.className = "msg " + (ok ? "ok" : "err");
+}
+
+function resetChannelForm() {
+  $("#ch-form").reset();
+  $("#ch-id").readOnly = false;
+  $("#ch-form-title").textContent = "新增 / 编辑渠道";
+  setMsg($("#ch-msg"), "");
+}
+
+function logout(message = "已退出登录") {
+  session++;
+  token = "";
+  rememberToken("");
+  for (const controller of pending) controller.abort();
+  pending.clear();
+  channels = [];
+  dynamics = [];
+  maintenance = [];
+  maintenanceBusy = false;
+  loads.maintenance = (loads.maintenance || 0) + 1;
+  $("#panel").classList.add("hidden");
+  $("#login").classList.remove("hidden");
+  $("#token").value = "";
+  $("#panel-sub").textContent = "";
+  for (const id of ["channels", "dyn-list", "alert-results", "maintenance-list", "maintenance-channels"]) $("#" + id).replaceChildren();
+  $("#alert-receivers").textContent = "请登录后查看通知配置";
+  $("#alert-receiver").replaceChildren(new Option("全部已配置接收端", ""));
+  $("#alert-test").disabled = true;
+  for (const id of ["channels-msg", "ch-msg", "dyn-msg", "alert-msg"]) setMsg($("#" + id), "");
+  document.querySelectorAll(".error-box").forEach(box => box.hidden = true);
+  resetChannelForm();
+  $("#dyn-form").reset();
+  resetDynamicForm();
+  resetMaintenanceForm();
+  $("#maintenance-list").removeAttribute("aria-busy");
+  $("#maintenance-form").removeAttribute("aria-busy");
+  $("#maintenance-save").textContent = "创建维护窗口";
+  $("#maintenance-refresh").textContent = "刷新维护窗口";
+  $("#maintenance-retry").textContent = "重试";
+  $("#maintenance-retry").disabled = false;
+  setMsg($("#login-msg"), message, message === "已退出登录");
+  $("#token").focus();
+}
+
+async function api(path, opts = {}) {
+  const requestSession = session;
+  const controller = new AbortController();
+  pending.add(controller);
+  const timeout = setTimeout(() => controller.abort(), 60000);
+  try {
+    const response = await fetch("/api/admin" + path, {
+      ...opts, cache: "no-store", signal: controller.signal,
+      headers: { "X-Admin-Token": token, ...(opts.body ? { "Content-Type": "application/json" } : {}), ...(opts.headers || {}) },
+    });
+    const text = await response.text();
+    if (requestSession !== session) throw new Error("登录状态已改变");
+    let data;
+    try { data = text ? JSON.parse(text) : {}; } catch { /* Preserve plain-text errors. */ }
+    if (!response.ok) {
+      const message = data?.error || text.trim().slice(0, 500) || `HTTP ${response.status}`;
+      if (response.status === 401) logout(`登录已失效：${message}，请重新登录。`);
+      const error = new Error(message);
+      if (Array.isArray(data?.results)) error.results = data.results;
+      throw error;
+    }
+    if (!data || typeof data !== "object") throw new Error("服务器返回的数据格式不正确");
+    return data;
+  } catch (error) {
+    if (controller.signal.aborted && requestSession === session) throw new Error("请求超时，请刷新确认结果后重试");
+    throw error;
+  } finally {
+    clearTimeout(timeout);
+    pending.delete(controller);
+  }
+}
+
+async function runAction(button, message, busyText, action) {
+  if (button.disabled) return;
+  const actionSession = session;
+  const original = button.textContent;
+  const scope = button.closest("form") || button.closest("tr");
+  const controls = scope ? [...scope.querySelectorAll("button,input,select,textarea")] : [button];
+  const disabled = controls.map(control => control.disabled);
+  controls.forEach(control => control.disabled = true);
+  button.textContent = busyText;
+  button.setAttribute("aria-busy", "true");
+  if (message) setMsg(message, "");
+  try {
+    await action();
+  } catch (error) {
+    if (actionSession === session && message) setMsg(message, error.message);
+  } finally {
+    controls.forEach((control, index) => control.disabled = disabled[index]);
+    button.textContent = original;
+    button.removeAttribute("aria-busy");
+  }
+}
+
+async function loadList(key, path, render) {
+  const requestSession = session;
+  const version = (loads[key] || 0) + 1;
+  loads[key] = version;
+  const box = $(`#${key}-error`);
+  const list = $(key === "channels" ? "#channels" : `#${key}-list`);
+  const retry = box.querySelector("button");
+  retry.disabled = true;
+  retry.textContent = "重试中…";
+  list.setAttribute("aria-busy", "true");
+  try {
+    const data = await api(path);
+    if (requestSession !== session || loads[key] !== version) return false;
+    if (!Array.isArray(data)) throw new Error("服务器返回的列表格式不正确");
+    render(data);
+    box.hidden = true;
+    return true;
+  } catch (error) {
+    if (requestSession === session && loads[key] === version) {
+      box.querySelector("span").textContent = `加载失败：${error.message}。可点击重试，已有列表可能不是最新数据。`;
+      box.hidden = false;
+    }
+    return false;
+  } finally {
+    if (loads[key] === version) {
+      retry.disabled = false;
+      retry.textContent = "重试";
+      list.setAttribute("aria-busy", "false");
+    }
+  }
+}
+
+function renderChannels(list) {
+  channels = list;
+  $("#panel-sub").textContent = `已登录 · ${list.length} 个渠道`;
+  $("#channels").innerHTML = list.length ? `<div class="card"><table class="data-table"><thead><tr>
+    <th>ID</th><th>名称</th><th>分组</th><th>类型</th><th>状态</th><th>操作</th></tr></thead><tbody>
+    ${list.map(c => `<tr>
+      <td data-label="ID">${esc(c.id)}</td><td data-label="名称">${esc(c.name)}</td><td data-label="分组">${esc(c.group)}</td>
+      <td data-label="类型"><div><span class="tag">${esc(c.type)}</span></div></td>
+      <td data-label="状态"><div><span class="tag ${c.enabled === false ? "bad" : "ok"}">${c.enabled === false ? "停用" : "启用"}</span><div class="help">#${c.sort || 0} · ${Number(c.config?.interval_seconds) > 0 ? `${esc(c.config.interval_seconds)} 秒` : "全局间隔"}</div></div></td>
+      <td data-label="操作"><div class="actions">
+        <button type="button" data-probe="${esc(c.id)}">立即探测</button>
+        <button type="button" data-edit="${esc(c.id)}">编辑</button>
+        <button type="button" data-toggle="${esc(c.id)}">${c.enabled === false ? "启用" : "停用"}</button>
+        <button type="button" class="danger" data-del="${esc(c.id)}">删除</button>
+      </div></td></tr>`).join("")}
+    </tbody></table></div>` : `<div class="card sub">暂无渠道，请先新增。</div>`;
+  renderMaintenanceChannels();
+  renderMaintenance(maintenance);
+}
+
+function resetDynamicForm() {
+  $("#dyn-form").reset();
+  $("#dyn-form").dataset.id = "";
+  $("#dyn-save").textContent = "发布动态";
+  setMsg($("#dyn-msg"), "");
+}
+
+const loadChannels = () => loadList("channels", "/channels", renderChannels);
+
+function maintenanceScope(window) {
+  if (window.all_channels) return "所有服务（包括新增渠道）";
+  return (window.channel_ids || []).map(id => {
+    const channel = channels.find(c => c.id === id);
+    return channel ? `${channel.name} (${id})` : id;
+  }).join("、") || "未指定渠道";
+}
+
+function maintenanceState(window) {
+  if (window.cancelled_at != null || window.state === "cancelled") return "cancelled";
+  const now = Math.floor(Date.now() / 1000);
+  if (window.state === "completed" || window.end_at <= now) return "completed";
+  return window.start_at > now ? "scheduled" : "active";
+}
+
+function updateMaintenanceControls() {
+  $("#maintenance-form").querySelectorAll("button,input,select,textarea").forEach(control => control.disabled = maintenanceBusy);
+  $("#maintenance-list").querySelectorAll("button").forEach(button => button.disabled = maintenanceBusy);
+  $("#maintenance-refresh").disabled = maintenanceBusy;
+  $("#maintenance-channels").disabled = maintenanceBusy || $("#maintenance-all").checked;
+  const selected = [...($("#maintenance-channels").selectedOptions || [])];
+  $("#maintenance-scope-summary").textContent = $("#maintenance-all").checked
+    ? `范围：所有服务（当前 ${channels.length} 个渠道，含维护期间新增渠道）`
+    : selected.length ? `已选 ${selected.length} 个渠道：${selected.map(option => option.textContent).join("、")}` : "尚未选择渠道";
+}
+
+function renderMaintenanceChannels() {
+  const selected = new Set([...($("#maintenance-channels").selectedOptions || [])].map(option => option.value));
+  $("#maintenance-channels").replaceChildren(...channels.map(channel => {
+    const option = new Option(`${channel.name} (${channel.id})${channel.enabled === false ? " · 已停用" : ""}`, channel.id);
+    option.selected = selected.has(channel.id);
+    return option;
+  }));
+  updateMaintenanceControls();
+}
+
+function resetMaintenanceForm() {
+  $("#maintenance-form").reset();
+  setMsg($("#maintenance-msg"), "");
+  updateMaintenanceControls();
+}
+
+function renderMaintenance(list) {
+  maintenance = list;
+  const rows = list.map(window => {
+    const state = maintenanceState(window);
+    const label = { scheduled: "待开始", active: "维护中", completed: "已结束", cancelled: "已取消 / 提前结束" }[state];
+    const canCancel = state === "active" || state === "scheduled";
+    return `<tr>
+      <td data-label="维护"><div>${esc(window.title)} <span class="tag ${canCancel ? "maintenance" : state === "completed" ? "ok" : ""}">${label}</span></div><div class="help announcement-body">${esc(window.body)}</div></td>
+      <td data-label="范围">${esc(maintenanceScope(window))}</td>
+      <td data-label="时间"><div>开始：${fmtTime(window.start_at)}<br>结束：${fmtTime(window.end_at)}${window.cancelled_at != null ? `<br>取消 / 提前结束：${fmtTime(window.cancelled_at)}` : ""}</div></td>
+      <td data-label="操作"><div class="actions">${canCancel ? `<button class="danger" type="button" data-maintenance-cancel="${esc(window.id)}"${maintenanceBusy ? " disabled" : ""}>${state === "active" ? "提前结束" : "取消计划"}</button>` : '<span class="help">只读</span>'}</div></td>
+    </tr>`;
+  }).join("");
+  $("#maintenance-list").innerHTML = list.length ? `<table class="data-table"><thead><tr><th>维护</th><th>范围</th><th>开始 / 结束</th><th>操作</th></tr></thead><tbody>${rows}</tbody></table>` : '<div class="sub">暂无维护窗口</div>';
+}
+
+const loadMaintenance = () => loadList("maintenance", "/maintenance", renderMaintenance);
+
+function localMaintenanceTime(value, label) {
+  const parts = /^(\d{4,})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2}))?$/.exec(value);
+  const date = new Date(value);
+  if (!parts || !Number.isFinite(date.getTime()) || date.getFullYear() !== Number(parts[1]) ||
+      date.getMonth() + 1 !== Number(parts[2]) || date.getDate() !== Number(parts[3]) ||
+      date.getHours() !== Number(parts[4]) || date.getMinutes() !== Number(parts[5]) || date.getSeconds() !== Number(parts[6] || 0)) {
+    throw new Error(`${label}不是有效的本地时间`);
+  }
+  return Math.floor(date.getTime() / 1000);
+}
+
+function maintenancePayload() {
+  const title = $("#maintenance-title").value.trim();
+  if (!title) throw new Error("维护标题不能为空");
+  const all_channels = $("#maintenance-all").checked;
+  const channel_ids = all_channels ? [] : [...$("#maintenance-channels").selectedOptions].map(option => option.value);
+  if (!all_channels && (!channel_ids.length || channel_ids.some(id => !channels.some(c => c.id === id)))) {
+    throw new Error("请选择至少一个有效渠道，或勾选所有服务");
+  }
+  const startValue = $("#maintenance-start").value;
+  const endValue = $("#maintenance-end").value;
+  if (!endValue) throw new Error("结束时间必填");
+  const start_at = startValue ? localMaintenanceTime(startValue, "开始时间") : 0;
+  const end_at = localMaintenanceTime(endValue, "结束时间");
+  const now = Math.floor(Date.now() / 1000);
+  const effectiveStart = start_at || now;
+  if (end_at <= effectiveStart || end_at <= now) throw new Error("结束时间必须晚于开始时间和当前时间");
+  if (end_at - effectiveStart > 30 * 86400) throw new Error("单次维护窗口不能超过 30 天");
+  return { title, body: $("#maintenance-body").value, start_at, end_at, all_channels, channel_ids };
+}
+
+async function runMaintenanceAction(button, busyText, action) {
+  if (maintenanceBusy || button.disabled) return;
+  const actionSession = session;
+  const original = button.textContent;
+  maintenanceBusy = true;
+  updateMaintenanceControls();
+  button.disabled = true;
+  button.textContent = busyText;
+  $("#maintenance-form").setAttribute("aria-busy", "true");
+  setMsg($("#maintenance-msg"), "");
+  try {
+    await action();
+  } catch (error) {
+    if (actionSession === session) setMsg($("#maintenance-msg"), error.message);
+  } finally {
+    if (actionSession === session) {
+      maintenanceBusy = false;
+      button.disabled = false;
+      button.textContent = original;
+      $("#maintenance-form").removeAttribute("aria-busy");
+      updateMaintenanceControls();
+    }
+  }
+}
+
+$("#maintenance-all").onchange = updateMaintenanceControls;
+$("#maintenance-channels").onchange = updateMaintenanceControls;
+$("#maintenance-new").onclick = () => { if (!maintenanceBusy) resetMaintenanceForm(); };
+$("#maintenance-retry").onclick = () => { if (!maintenanceBusy) return loadMaintenance(); };
+$("#maintenance-refresh").onclick = () => runMaintenanceAction($("#maintenance-refresh"), "刷新中…", async () => {
+  await Promise.all([loadChannels(), loadMaintenance(), loadDynamics()]);
+});
+$("#maintenance-form").onsubmit = event => {
+  event.preventDefault();
+  if (maintenanceBusy) return;
+  let payload;
+  try { payload = maintenancePayload(); } catch (error) { return setMsg($("#maintenance-msg"), error.message); }
+  return runMaintenanceAction($("#maintenance-save"), "创建中…", async () => {
+    await api("/maintenance", { method: "POST", body: JSON.stringify(payload) });
+    resetMaintenanceForm();
+    setMsg($("#maintenance-msg"), payload.start_at > Date.now() / 1000 ? "维护计划已创建" : "维护窗口已生效", true);
+    await Promise.all([loadMaintenance(), loadDynamics()]);
+  });
+};
+$("#maintenance-list").onclick = event => {
+  const button = event.target.closest("[data-maintenance-cancel]");
+  if (!button || button.disabled || maintenanceBusy) return;
+  const window = maintenance.find(item => String(item.id) === button.dataset.maintenanceCancel);
+  if (!window) return;
+  const state = maintenanceState(window);
+  if (state !== "active" && state !== "scheduled") return setMsg($("#maintenance-msg"), "该维护窗口已结束或取消，请刷新列表");
+  const action = state === "active" ? "提前结束" : "取消计划";
+  if (!confirm(`${action}「${window.title}」？\n范围：${maintenanceScope(window)}\n开始：${fmtTime(window.start_at)}\n结束：${fmtTime(window.end_at)}`)) return;
+  return runMaintenanceAction(button, "处理中…", async () => {
+    await api(`/maintenance/${encodeURIComponent(window.id)}/cancel`, { method: "POST" });
+    setMsg($("#maintenance-msg"), state === "active" ? "维护已提前结束" : "维护计划已取消", true);
+    await Promise.all([loadMaintenance(), loadDynamics()]);
+  });
+};
+
+function renderDynamics(list) {
+  const rows = list.map(d => {
+    const isWindow = d.source === "scheduled" || String(d.id).startsWith("m");
+    const state = (isWindow ? { pending: "待开始", active: "维护中", resolved: "已结束" } : { pending: "待发布", published: "已发布", active: "进行中", resolved: "已解决" })[d.state] || d.state;
+    const kind = { notice: "公告", incident: "故障", maintenance: "维护" }[d.kind] || d.kind;
+    const source = isWindow ? "维护计划" : d.source === "manual" ? "手动" : d.source === "human" ? "人工" : "自动";
+    const updates = (d.updates || []).length;
+    const editable = !isWindow && String(d.id).startsWith("d");
+    return `<tr>
+      <td data-label="动态">
+        <div>${d.pinned ? "置顶 · " : ""}${esc(d.title)} <span class="tag">${esc(kind)}</span> <span class="tag ${isWindow ? "maintenance" : d.state === "resolved" ? "ok" : d.state === "active" ? "bad" : ""}">${esc(state)}</span> <span class="tag">${source}</span></div>
+        <div class="sub announcement-body" style="margin:0">${esc(d.body || "")}</div>
+        ${updates ? `<div class="help">${updates} 条更新记录</div>` : ""}
+      </td>
+      <td data-label="时间"><div>${fmtTime(d.start_at)}<br><span class="sub">${d.end_at ? "→ " + fmtTime(d.end_at) : "至今"}</span></div></td>
+      <td data-label="操作"><div class="actions">
+        ${editable && d.state !== "resolved" ? `<button type="button" data-dyn-resolve="${esc(d.id)}">标记解决</button>` : ""}
+        ${editable ? `<button type="button" data-dyn-update="${esc(d.id)}">加更新</button>
+        <button type="button" data-dyn-edit="${esc(d.id)}">编辑</button>
+        <button type="button" class="danger" data-dyn-del="${esc(d.id)}">删除</button>` : isWindow ? '<a class="help" href="#maintenance-section">维护记录只读，请到维护窗口区操作</a>' : `<span class="help">自动生成</span>`}
+      </div></td></tr>`;
+  }).join("");
+  $("#dyn-list").innerHTML = list.length ? `<table class="data-table"><thead><tr><th>动态</th><th>时间</th><th>操作</th></tr></thead><tbody>${rows}</tbody></table>` : `<div class="sub">暂无动态</div>`;
+  dynamics = list;
+}
+const loadDynamics = () => loadList("dyn", "/dynamics", renderDynamics);
+
+async function loadAlertReceivers() {
+  const requestSession = session;
+  const selected = $("#alert-receiver").value;
+  $("#alert-test").disabled = true;
+  try {
+    const data = await api("/alerts");
+    if (requestSession !== session) return;
+    if (!Array.isArray(data.receivers)) throw new Error("通知配置格式不正确");
+    const configured = data.receivers.filter(r => r.configured);
+    $("#alert-receivers").textContent = `${data.enabled ? "告警已启用" : "告警总开关已关闭"} · 已配置：${configured.map(r => r.name).join("、") || "无"}`;
+    $("#alert-receiver").replaceChildren(new Option("全部已配置接收端", ""), ...configured.map(r => new Option(r.name, r.id)));
+    $("#alert-receiver").value = configured.some(r => r.id === selected) ? selected : "";
+    $("#alert-test").disabled = !data.enabled || !configured.length;
+  } catch (error) {
+    if (requestSession !== session) return;
+    $("#alert-receivers").textContent = "通知配置读取失败，请点击刷新通知配置";
+    setMsg($("#alert-msg"), error.message);
+  }
+}
+
+function renderAlertResults(results) {
+  const rows = (Array.isArray(results) ? results : []).map(result => {
+    const item = document.createElement("p");
+    item.className = `msg ${result.ok ? "ok" : "err"}`;
+    item.textContent = `${result.name || result.receiver}：${result.ok ? "接收端已接受" : "发送失败"}${result.error ? `（${result.error}）` : ""}`;
+    return item;
+  });
+  $("#alert-results").replaceChildren(...rows);
+}
+
+async function refreshPanel() {
+  await Promise.all([loadChannels(), loadDynamics(), loadAlertReceivers(), loadMaintenance()]);
+}
+
+async function login(saved = false) {
+  const candidate = saved ? token : ($("#token").value.trim() || token);
+  if (!candidate) return setMsg($("#login-msg"), "请输入管理员令牌");
+  token = candidate;
+  await runAction($("#login-btn"), $("#login-msg"), "登录中…", async () => {
+    const list = await api("/channels");
+    if (!Array.isArray(list)) throw new Error("服务器返回的渠道格式不正确");
+    rememberToken(token);
+    $("#token").value = "";
+    renderChannels(list);
+    $("#channels-error").hidden = true;
+    $("#login").classList.add("hidden");
+    $("#panel").classList.remove("hidden");
+    await Promise.all([loadDynamics(), loadAlertReceivers(), loadMaintenance()]);
+  });
+}
+
+$("#login").onsubmit = event => { event.preventDefault(); login(); };
+$("#logout-btn").onclick = () => logout();
+$("#panel-refresh").onclick = () => runAction($("#panel-refresh"), $("#channels-msg"), "刷新中…", refreshPanel);
+$("#channels-retry").onclick = loadChannels;
+$("#dyn-retry").onclick = loadDynamics;
+$("#ch-new").onclick = () => { resetChannelForm(); $("#ch-id").focus(); };
+
+$("#channels").onclick = event => {
+  const button = event.target.closest("button");
+  if (!button || button.disabled) return;
+  const id = button.dataset.edit ?? button.dataset.del ?? button.dataset.probe ?? button.dataset.toggle;
+  const channel = channels.find(c => c.id === id);
+  if (!channel) return;
+  if (button.dataset.edit != null) {
+    $("#ch-id").value = channel.id;
+    $("#ch-id").readOnly = true;
+    $("#ch-name").value = channel.name;
+    $("#ch-group").value = channel.group;
+    $("#ch-type").value = channel.type;
+    $("#ch-enabled").checked = channel.enabled !== false;
+    $("#ch-sort").value = channel.sort;
+    $("#ch-config").value = JSON.stringify(channel.config || {}, null, 2);
+    $("#ch-form-title").textContent = `编辑渠道 · ${channel.name}`;
+    setMsg($("#ch-msg"), "");
+    $("#ch-form").scrollIntoView({ behavior: "smooth", block: "center" });
+    $("#ch-name").focus({ preventScroll: true });
+    return;
+  }
+  if (button.dataset.del != null) {
+    if (!confirm(`删除渠道 ${channel.name} (${id})？`)) return;
+    return runAction(button, $("#channels-msg"), "删除中…", async () => {
+      await api(`/channels/${encodeURIComponent(id)}`, { method: "DELETE" });
+      setMsg($("#channels-msg"), `已删除渠道 ${channel.name}`, true);
+      if ($("#ch-id").value === id) resetChannelForm();
+      await loadChannels();
+    });
+  }
+  if (button.dataset.toggle != null) {
+    const enabled = channel.enabled === false;
+    return runAction(button, $("#channels-msg"), "保存中…", async () => {
+      await api("/channels", { method: "POST", body: JSON.stringify({ ...channel, enabled }) });
+      if ($("#ch-id").value === id) $("#ch-enabled").checked = enabled;
+      setMsg($("#channels-msg"), `已${enabled ? "启用" : "停用"}渠道 ${channel.name}`, true);
+      await loadChannels();
+    });
+  }
+  if (button.dataset.probe != null) {
+    return runAction(button, $("#channels-msg"), "探测中…", async () => {
+      const result = await api(`/probe/${encodeURIComponent(id)}`, { method: "POST" });
+      const players = result.players != null ? ` · 玩家 ${result.players}${result.max_players != null ? `/${result.max_players}` : ""}` : "";
+      const detail = `${channel.name} · ${result.ok ? "探测成功" : "探测失败"} · 响应耗时 ${fmtLat(result.latency_ms)}${channel.type === "openai" ? ` · 首字 TTFT ${fmtLat(result.ttft_ms)}` : ""}${players}${result.error ? ` · ${result.error}` : ""}`;
+      setMsg($("#channels-msg"), detail, result.ok === true);
+      await loadDynamics();
+    });
+  }
+};
+
+$("#ch-form").onsubmit = event => {
+  event.preventDefault();
+  let config;
+  try {
+    config = JSON.parse($("#ch-config").value || "{}");
+    if (!config || typeof config !== "object" || Array.isArray(config)) throw new Error("配置必须是 JSON 对象");
+    const interval = config.interval_seconds;
+    if (interval != null && (!Number.isInteger(interval) || (interval !== 0 && interval < 10))) throw new Error("interval_seconds 必须为 0（全局间隔）或至少 10 秒的整数");
+  } catch (error) { return setMsg($("#ch-msg"), error instanceof SyntaxError ? "配置不是合法 JSON" : error.message); }
+  const sortInput = $("#ch-sort").value.trim();
+  const sortVal = Number(sortInput);
+  if (!/^\d+$/.test(sortInput) || !Number.isInteger(sortVal) || sortVal < 0 || sortVal > 2147483647) {
+    return setMsg($("#ch-msg"), "排序必须是 0 到 2147483647 之间的整数");
+  }
+  const channel = {
+    id: $("#ch-id").value.trim(), name: $("#ch-name").value.trim(), group: $("#ch-group").value.trim() || "默认",
+    type: $("#ch-type").value, config, enabled: $("#ch-enabled").checked,
+    sort: sortVal,
+  };
+  if (!channel.id || !channel.name) return setMsg($("#ch-msg"), "ID 和名称不能为空");
+  return runAction($("#ch-save"), $("#ch-msg"), "保存中…", async () => {
+    await api("/channels", { method: "POST", body: JSON.stringify(channel) });
+    $("#ch-id").readOnly = true;
+    $("#ch-form-title").textContent = `编辑渠道 · ${channel.name}`;
+    setMsg($("#ch-msg"), "已保存", true);
+    await loadChannels();
+  });
+};
+
+$("#alert-refresh").onclick = () => runAction($("#alert-refresh"), $("#alert-msg"), "读取中…", loadAlertReceivers);
+$("#alert-test").onclick = () => runAction($("#alert-test"), $("#alert-msg"), "发送中…", async () => {
+  const actionSession = session;
+  $("#alert-results").replaceChildren();
+  $("#alert-receiver").disabled = true;
+  $("#alert-refresh").disabled = true;
+  try {
+    const result = await api("/alerts/test", { method: "POST", body: JSON.stringify({ receiver: $("#alert-receiver").value }) });
+    if (actionSession !== session) return;
+    renderAlertResults(result.results);
+    if (!result.ok) throw new Error(result.error || "测试告警发送失败");
+    setMsg($("#alert-msg"), "测试消息已提交，请在对应应用中确认收到。", true);
+  } catch (error) {
+    if (actionSession === session) renderAlertResults(error.results);
+    throw error;
+  } finally {
+    $("#alert-receiver").disabled = false;
+    $("#alert-refresh").disabled = false;
+  }
+});
+
+$("#dyn-form").onsubmit = event => {
+  event.preventDefault();
+  const id = $("#dyn-form").dataset.id;
+  const payload = {
+    kind: $("#dyn-kind").value, state: $("#dyn-state").value,
+    title: $("#dyn-title").value.trim(), body: $("#dyn-body").value,
+    pinned: $("#dyn-pinned").value === "true",
+    services: $("#dyn-services").value.split(",").map(s => s.trim()).filter(Boolean),
+  };
+  if (!payload.title) return setMsg($("#dyn-msg"), "标题不能为空");
+  return runAction($("#dyn-save"), $("#dyn-msg"), "保存中…", async () => {
+    if (id) {
+      await api(`/dynamics/${encodeURIComponent(id)}`, { method: "POST", body: JSON.stringify(payload) });
+      setMsg($("#dyn-msg"), "已更新动态", true);
+    } else {
+      await api("/dynamics", { method: "POST", body: JSON.stringify(payload) });
+      setMsg($("#dyn-msg"), "已发布动态", true);
+    }
+    resetDynamicForm();
+    await loadDynamics();
+  });
+};
+$("#dyn-new").onclick = () => resetDynamicForm();
+
+$("#dyn-list").onclick = event => {
+  const button = event.target.closest("button");
+  if (!button || button.disabled) return;
+  const id = button.dataset.dynResolve ?? button.dataset.dynUpdate ?? button.dataset.dynEdit ?? button.dataset.dynDel;
+  const dyn = dynamics.find(d => d.id === id);
+  if (!dyn) return;
+  if (dyn.source === "scheduled" || String(dyn.id).startsWith("m")) {
+    setMsg($("#dyn-msg"), "维护记录只读，请到维护窗口区操作");
+    $("#maintenance-section").scrollIntoView({ behavior: "smooth", block: "start" });
+    return;
+  }
+  if (button.dataset.dynResolve != null) {
+    return runAction(button, $("#dyn-msg"), "处理中…", async () => {
+      await api(`/dynamics/${encodeURIComponent(id)}`, { method: "POST", body: JSON.stringify({ state: "resolved" }) });
+      setMsg($("#dyn-msg"), "已标记为解决", true);
+      await loadDynamics();
+    });
+  }
+  if (button.dataset.dynUpdate != null) {
+    const label = prompt("更新标题（如：已定位 / 已修复）");
+    if (label === null) return;
+    if (!label.trim()) return setMsg($("#dyn-msg"), "更新标题不能为空");
+    const body = prompt("更新内容（可留空）") || "";
+    return runAction(button, $("#dyn-msg"), "提交中…", async () => {
+      await api(`/dynamics/${encodeURIComponent(id)}/updates`, { method: "POST", body: JSON.stringify({ label: label.trim(), body }) });
+      setMsg($("#dyn-msg"), "已添加更新记录", true);
+      await loadDynamics();
+    });
+  }
+  if (button.dataset.dynEdit != null) {
+    $("#dyn-form").dataset.id = id;
+    $("#dyn-kind").value = dyn.kind;
+    $("#dyn-state").value = dyn.state;
+    $("#dyn-title").value = dyn.title;
+    $("#dyn-body").value = dyn.body || "";
+    $("#dyn-pinned").value = dyn.pinned ? "true" : "false";
+    $("#dyn-services").value = (dyn.services || []).join(", ");
+    $("#dyn-save").textContent = "保存修改";
+    setMsg($("#dyn-msg"), "");
+    $("#dyn-form").scrollIntoView({ behavior: "smooth", block: "center" });
+    return;
+  }
+  if (button.dataset.dynDel != null) {
+    if (!confirm(`删除动态「${dyn.title}」？`)) return;
+    return runAction(button, $("#dyn-msg"), "删除中…", async () => {
+      await api(`/dynamics/${encodeURIComponent(id)}`, { method: "DELETE" });
+      setMsg($("#dyn-msg"), "已删除", true);
+      await loadDynamics();
+    });
+  }
+};
+
+function setTheme(theme) {
+  document.documentElement.dataset.theme = theme;
+  $("#theme-btn").textContent = theme === "dark" ? "明亮模式" : "深色模式";
+  $("#theme-btn").setAttribute("aria-label", `切换到${theme === "dark" ? "明亮" : "深色"}模式`);
+}
+$("#theme-btn").onclick = () => {
+  const theme = document.documentElement.dataset.theme === "dark" ? "light" : "dark";
+  setTheme(theme);
+  try { localStorage.setItem("theme", theme); } catch { /* Theme still works without storage. */ }
+};
+(function init() {
+  let saved;
+  try { saved = localStorage.getItem("theme"); } catch { /* Use the system theme. */ }
+  setTheme(saved === "dark" || saved === "light" ? saved : matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+  if (token) login(true);
+})();
+</script>
+</body>
+</html>

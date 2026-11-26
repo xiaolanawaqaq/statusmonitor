@@ -1,0 +1,167 @@
+site:
+  title: "服务状态"
+  description: "可用性指标来自调用记录与主动探测，5 分钟一个探测窗口"
+
+server:
+  addr: "127.0.0.1:18080"
+  tls_cert: ""                  # 例如 /etc/ssl/certs/fullchain.pem
+  tls_key: ""                   # 例如 /etc/ssl/private/privkey.pem
+  http_redirect_addr: ""        # 配了证书后可设 ":80" 自动跳转 HTTPS
+
+probe:
+  interval_seconds: 60
+  timeout_seconds: 30
+  concurrency: 8
+
+storage:
+  path: "data/status.db"
+  retention_days: 30
+
+alerts:
+  enabled: false
+  webhook_url: ""            # 以下接收端任选一种或同时启用；未使用的留空
+  telegram_token: ""         # 可填 env:TELEGRAM_BOT_TOKEN
+  telegram_chat_id: ""       # 可填 env:TELEGRAM_CHAT_ID，须与 token 成对填写
+  dingtalk_webhook_url: ""   # env:DINGTALK_WEBHOOK_URL，自定义机器人完整 Webhook
+  dingtalk_secret: ""        # env:DINGTALK_SECRET，启用“加签”时填 SEC... 密钥
+  feishu_webhook_url: ""     # env:FEISHU_WEBHOOK_URL
+  feishu_secret: ""          # env:FEISHU_SECRET，启用签名校验时填写
+  wecom_webhook_url: ""      # env:WECOM_WEBHOOK_URL，企业微信群机器人
+  discord_webhook_url: ""    # env:DISCORD_WEBHOOK_URL
+  slack_webhook_url: ""      # env:SLACK_WEBHOOK_URL，Incoming Webhook
+  bark_server_url: ""        # 可选，自建 Bark 服务器；留空使用 https://api.day.app
+  bark_device_key: ""        # env:BARK_DEVICE_KEY
+  ntfy_url: ""               # env:NTFY_URL，包含 topic，如 https://ntfy.sh/my-topic
+  ntfy_token: ""             # env:NTFY_TOKEN，可选 Bearer token
+  message_prefix: ""         # 可填“游戏监控”，用于机器人关键词校验
+  fail_threshold: 3          # 连续失败 N 次判定为故障
+  recover_threshold: 1       # 连续成功 N 次判定为恢复
+  latency_threshold_ms: 0    # 响应劣化告警阈值，0 关闭；成功探测耗时跨越阈值时通知一次
+
+admin:
+  token: "env:ADMIN_TOKEN"
+
+# 对外公开 API（/v1/*）：给第三方、玩家社区嵌页面用。
+# 关掉后 /v1/* 返回 404，内部 /api/* 不受影响。
+api:
+  enabled: true
+  cors_origins: ["*"]        # 精确来源写法：["https://status.example.com"]
+  rate_limit_rpm: 120        # 每 IP 每分钟请求数（突发容量也是这个值）
+  cache_seconds: 10          # /v1 响应在内存缓存的时间，挡住高频轮询
+
+channels:
+  - id: gpt
+    name: "GPT"
+    group: "GPT"
+    type: openai
+    config:
+      base_url: "https://api.openai.com/v1"
+      api_key: "env:OPENAI_API_KEY"
+      model: "gpt-4o-mini"
+      stream: true
+      max_tokens: 16
+
+  - id: deepseek
+    name: "DeepSeek"
+    group: "DeepSeek"
+    type: openai
+    config:
+      base_url: "https://api.deepseek.com/v1"
+      api_key: "env:DEEPSEEK_API_KEY"
+      model: "deepseek-chat"
+      stream: true
+      max_tokens: 16
+
+  - id: homepage
+    name: "官网"
+    group: "站点"
+    type: http
+    config:
+      url: "https://example.com"
+      expect_status: [200, 204]
+      interval_seconds: 120
+
+  # ---- 游戏服务器 ----
+  # Minecraft Java 版：协议级探测，返回 MOTD/版本/玩家数
+  - id: game-mc
+    name: "Minecraft"
+    group: "游戏"
+    type: minecraft
+    # sort: 1                 # 数字越小越靠前；已建库请通过后台编辑
+    config:
+      host: "127.0.0.1"
+      port: 25565
+      interval_seconds: 60
+      # expect: "生存服"        # 可选：校验 MOTD 包含某段文字
+
+  # Steam/Source 引擎（CS2、ARK、7 Days、瓦尔海姆等）：A2S_INFO 查询，返回玩家数
+  - id: game-cs
+    name: "CS2"
+    group: "游戏"
+    type: steam
+    config:
+      host: "127.0.0.1"
+      port: 27015
+      interval_seconds: 60
+
+  # 通用 UDP（Bedrock 基岩版等自定义协议）：发包 + 关键字匹配
+  - id: game-bedrock
+    name: "基岩版"
+    group: "游戏"
+    type: udp
+    config:
+      host: "127.0.0.1"
+      port: 19132
+      interval_seconds: 60
+      send: "\x62\x01\x05\x00"    # Unconnected Ping
+      expect: "MCPE"
+
+  # 网络层：ICMP ping / DNS 解析
+  - id: gateway
+    name: "网关"
+    group: "网络"
+    type: icmp
+    config:
+      host: "1.1.1.1"
+
+  - id: login-dns
+    name: "登录服域名"
+    group: "网络"
+    type: dns
+    config:
+      host: "login.example.com"
+      expect: "203.0.113."        # 可选：校验解析出的 IP 段
+
+  # SSH 服务器：服务端先发横幅，expect 即可校验
+  - id: bastion
+    name: "跳板机"
+    group: "网络"
+    type: tcp
+    config:
+      host: "127.0.0.1"
+      port: 22
+      expect: "SSH-2.0"
+
+  - id: demo-gpt
+    name: "演示 GPT"
+    group: "演示"
+    type: mock
+    config:
+      latency_ms: [600, 1800]
+      fail_rate: 0.02
+
+  - id: demo-gemini
+    name: "演示 Gemini"
+    group: "演示"
+    type: mock
+    config:
+      latency_ms: [900, 2500]
+      fail_rate: 0.08
+
+  - id: demo-kimi
+    name: "演示 Kimi"
+    group: "演示"
+    type: mock
+    config:
+      latency_ms: [1500, 4500]
+      fail_rate: 0.15

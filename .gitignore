@@ -1,0 +1,9 @@
+data/
+certs/
+config.local.yaml
+.env
+.build.*/
+*.db
+*.db-shm
+*.db-wal
+status-monitor

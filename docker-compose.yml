@@ -1,0 +1,28 @@
+services:
+  status-monitor:
+    build: .
+    container_name: status-monitor
+    restart: unless-stopped
+    ports:
+      - "8000:8000"       # 如需 HTTPS，改成 "443:8000" 并在 config 里配证书
+    environment:
+      ADMIN_TOKEN: "change-me"
+      OPENAI_API_KEY: ""
+      DEEPSEEK_API_KEY: ""
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID:-}
+      DINGTALK_WEBHOOK_URL: ${DINGTALK_WEBHOOK_URL:-}
+      DINGTALK_SECRET: ${DINGTALK_SECRET:-}
+      FEISHU_WEBHOOK_URL: ${FEISHU_WEBHOOK_URL:-}
+      FEISHU_SECRET: ${FEISHU_SECRET:-}
+      WECOM_WEBHOOK_URL: ${WECOM_WEBHOOK_URL:-}
+      DISCORD_WEBHOOK_URL: ${DISCORD_WEBHOOK_URL:-}
+      SLACK_WEBHOOK_URL: ${SLACK_WEBHOOK_URL:-}
+      BARK_DEVICE_KEY: ${BARK_DEVICE_KEY:-}
+      BARK_SERVER_URL: ${BARK_SERVER_URL:-}
+      NTFY_URL: ${NTFY_URL:-}
+      NTFY_TOKEN: ${NTFY_TOKEN:-}
+    volumes:
+      - ./data:/app/data
+      - ./config.yaml:/app/config.yaml:ro
+      - ./certs:/app/certs:ro   # 证书目录（使用 server.tls_cert / tls_key 时挂载）

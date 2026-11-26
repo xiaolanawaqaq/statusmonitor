@@ -1,0 +1,732 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Status</title>
+<style>
+:root{
+  color-scheme:light;
+  --surface:#fff;--ink:#161618;--muted:#62626d;--line:#e4e4e7;--soft-line:#f7f7f8;
+  --badge:#f4f4f5;--green:#24c19a;--green-soft:#d8f8f0;--amber:#fbbf24;--amber-soft:#fef3c7;
+  --red:#f5785c;--red-soft:#fddfd9;--border-strong:#b7b7c0;--blue:#2465c8;--blue-soft:#eaf2ff;
+  font-family:Inter,ui-sans-serif,-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+}
+:root[data-theme=dark]{
+  color-scheme:dark;
+  --surface:#111c2e;--ink:#e7edf6;--muted:#a8b5c9;--line:#2b3b52;--soft-line:#213047;
+  --badge:#23334a;--green-soft:#113e35;--amber-soft:#42351b;--red-soft:#442b2d;--border-strong:#586b86;--blue:#9bc1ff;--blue-soft:#1c3559;
+}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--surface);color:var(--ink);font-size:14px;line-height:1.5}
+a{color:inherit}
+[hidden]{display:none!important}
+.shell{width:min(1180px,calc(100% - 48px));margin:0 auto;padding:20px 0 40px}
+body.history-page .shell{width:min(760px,calc(100% - 48px))}
+header{display:flex;align-items:center;gap:18px;margin-bottom:16px}
+.brand{display:inline-flex;align-items:center;gap:10px;font-size:24px;font-weight:650;margin-right:auto;text-decoration:none}
+.mark{width:30px;height:30px;flex:0 0 30px;display:grid;place-items:center;border-radius:8px;background:var(--ink);color:var(--surface);font-size:15px;font-weight:800}
+nav{display:flex;gap:4px}
+nav a{padding:7px 12px;border-radius:7px;color:var(--muted);text-decoration:none;font-weight:500}
+nav a:hover{background:var(--soft-line);color:var(--ink)}
+nav a[aria-current=page]{color:var(--ink);background:var(--badge)}
+button{font:inherit;color:inherit;cursor:pointer}
+.ghost{border:.5px solid var(--border-strong);background:transparent;border-radius:7px;padding:7px 12px;color:var(--muted)}
+.ghost:hover{background:var(--soft-line);color:var(--ink)}
+.banner{display:flex;align-items:center;gap:12px;margin-bottom:8px;padding:9px 14px;border:1px solid var(--line);border-left-width:4px;border-radius:8px;background:var(--surface);text-decoration:none}
+.banner.active{border-left-color:var(--amber);background:var(--amber-soft)}
+.banner.info{border-left-color:var(--green);background:var(--green-soft)}
+.banner-title{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:550}
+.banner-time{color:var(--muted);font-size:12px}
+.overall{margin-bottom:18px;border-radius:8px;padding:1px;background:var(--green)}
+.overall.degraded{background:var(--amber)}
+.overall.outage{background:var(--red)}
+.overall.unknown{background:var(--line)}
+.overall h1{margin:0;padding:12px 16px;font-size:16px;font-weight:550;border-radius:7px 7px 0 0;background:var(--green-soft)}
+.overall.degraded h1{background:var(--amber-soft)}
+.overall.outage h1{background:var(--red-soft)}
+.overall.unknown h1{background:var(--badge)}
+.overall p{margin:0;padding:12px 16px;border-radius:0 0 7px 7px;background:var(--surface)}
+.card{border:.5px solid var(--line);border-radius:8px;box-shadow:0 1px 2px rgb(0 0 0/3%),0 1px 4px rgb(0 0 0/3%);overflow:hidden}
+.card-head{display:flex;align-items:center;gap:16px;min-height:53px;padding:0 16px;border-bottom:.5px solid var(--soft-line)}
+.card-head h2{margin:0;font-size:18px;font-weight:500}
+.card-head .meta{margin-left:auto;color:var(--muted);font-size:12px}
+.group{padding:12px 16px;border-bottom:.5px solid var(--soft-line)}
+.group:last-child{border-bottom:0}
+.group-head{display:flex;align-items:center;gap:8px;min-height:28px}
+.group-head h3{margin:0;font-size:14px;font-weight:500}
+.group-head .icon{width:16px;height:16px;flex:0 0 16px;border-radius:50%;display:grid;place-items:center;background:var(--green);color:#fff;font-size:10px;font-weight:800}
+.group-head .icon.partial{background:var(--amber)}
+.group-head .icon.down{background:var(--red);font-size:11px}
+.group-head .icon.nodata{background:var(--muted)}
+.group-head .uptime{margin-left:auto;color:var(--muted);white-space:nowrap;font-variant-numeric:tabular-nums}
+.bars{display:grid;grid-template-columns:repeat(var(--n,90),1fr);gap:2px;height:14px;margin-top:6px}
+.bar{border-radius:1px;background:var(--green)}
+.bar.partial{background:var(--amber)}
+.bar.down{background:var(--red)}
+.bar.nodata{background:var(--line)}
+.stats{display:flex;gap:14px;color:var(--muted);font-size:12px;margin-top:5px;font-variant-numeric:tabular-nums}
+.spark-wrap{display:flex;align-items:center;gap:10px;margin-top:5px}
+.spark{width:min(420px,55%);height:28px;flex:0 1 auto}
+.spark polyline{fill:none;stroke:var(--green);stroke-width:1.5;stroke-linejoin:round}
+.spark polygon{fill:var(--green);opacity:.14;stroke:none}
+.spark-peak{color:var(--muted);font-size:11px;font-variant-numeric:tabular-nums}
+.legend{display:flex;flex-wrap:wrap;gap:6px 16px;padding:10px 16px;border-top:.5px solid var(--soft-line);color:var(--muted);font-size:12px}
+.legend span{display:inline-flex;align-items:center;gap:5px}
+.legend i{width:10px;height:10px;border-radius:2px;background:var(--green)}
+.legend i.partial{background:var(--amber)}
+.legend i.down{background:var(--red)}
+.legend i.nodata{background:var(--line)}
+footer{padding-top:22px;text-align:center;color:var(--muted);font-size:12px}
+.history-item{border:.5px solid var(--line);border-radius:8px;margin-bottom:10px;padding:12px 16px}
+.history-item h3{margin:0 0 6px;font-size:14px;font-weight:550}
+.history-item .sub{color:var(--muted);font-size:12px}
+.days{display:flex;gap:2px;margin-top:8px}
+.day{flex:1;height:10px;border-radius:1px;background:var(--green)}
+.day.partial{background:var(--amber)}
+.day.down{background:var(--red)}
+.day.nodata{background:var(--line)}
+.inc{border-left:3px solid var(--amber);padding-left:10px;margin-top:8px}
+.inc.resolved{border-left-color:var(--green)}
+.empty{padding:28px;text-align:center;color:var(--muted)}
+button:disabled{cursor:wait;opacity:.6}
+button:focus-visible,a:focus-visible,select:focus-visible{outline:2px solid var(--green);outline-offset:3px}
+.brand,#site-title,main,.card,.group{min-width:0}
+#site-title,h1,h2,h3,.overall p,.history-item,.stats,footer{overflow-wrap:anywhere}
+.banner{align-items:flex-start}
+.banner-content{flex:1;min-width:0}
+.banner-heading{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 12px}
+.banner-title{white-space:normal;overflow:visible;overflow-wrap:anywhere}
+.banner-time{overflow-wrap:anywhere}
+.banner-body,.announcement-body{margin:6px 0 0;white-space:pre-wrap;overflow-wrap:anywhere}
+.card-head{flex-wrap:wrap;padding-top:10px;padding-bottom:10px;gap:8px 16px}
+.card-head .meta{overflow-wrap:anywhere}
+.group-head{flex-wrap:wrap}
+.group-head h3{flex:1;min-width:0}
+.group-head .uptime{white-space:normal;text-align:right}
+.bars{grid-template-columns:repeat(90,minmax(0,1fr))}
+.bar,.day{min-width:0}
+.stats{flex-wrap:wrap;gap:3px 14px}
+.error-box{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:0 0 12px;padding:10px 14px;border:1px solid var(--red);border-radius:8px;background:var(--red-soft)}
+.error-box span{flex:1;min-width:0;overflow-wrap:anywhere}
+.history-meta{padding:8px 16px 0;color:var(--muted);font-size:12px;overflow-wrap:anywhere}
+.history-select{display:flex;align-items:center;gap:6px;margin-left:auto;color:var(--muted);font-size:12px}
+.history-select select{font:inherit;padding:4px 8px;border:1px solid var(--line);border-radius:6px;background:var(--surface);color:var(--ink)}
+#hist-ann-list{padding:12px 16px}
+#hist-ann-list .history-item:last-child{margin-bottom:0}
+@media(max-width:600px){
+  .shell,body.history-page .shell{width:calc(100% - 24px);padding-top:14px}
+  header{flex-wrap:wrap;gap:10px}
+  .brand{font-size:20px;flex:1}
+  nav{order:3;width:100%}
+  #theme-btn{flex-shrink:0}
+  .group,.card-head,.history-item{padding-left:12px;padding-right:12px}
+  .group-head .uptime{width:calc(100% - 24px);margin-left:24px;text-align:left;font-size:12px}
+  .bars,.days{gap:1px}
+  .card-head .meta{margin-left:0;width:100%}
+  .banner-heading{display:block}
+  .banner-time{display:block;margin-top:3px}
+}
+
+/* ---- history timeline (mirrors the reference status page) ---- */
+.history-toolbar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:12px 16px 0}
+.filters{display:flex;flex-wrap:wrap;gap:6px}
+.filters button{border:1px solid var(--line);background:transparent;color:var(--muted);border-radius:999px;padding:4px 12px;font-size:12px}
+.filters button[aria-pressed=true]{background:var(--ink);color:var(--surface);border-color:var(--ink)}
+.history-count{margin-left:auto;color:var(--muted);font-size:12px}
+.incident-day{display:grid;grid-template-columns:64px minmax(0,1fr);gap:14px;padding:14px 16px;border-top:.5px solid var(--soft-line)}
+.incident-day:first-of-type{border-top:0}
+.incident-date{text-align:center;color:var(--muted);font-size:11px;line-height:1.35;padding-top:2px}
+.incident-date strong{display:block;font-size:22px;color:var(--ink);font-weight:650;line-height:1.1}
+.incident-list{display:flex;flex-direction:column;gap:10px;min-width:0}
+.incident-card{border:1px solid var(--line);border-radius:8px;padding:12px 14px;background:var(--surface)}
+.incident-card.pinned{border-color:var(--amber);box-shadow:0 0 0 2px var(--amber-soft)}
+.incident-card.active{border-left:4px solid var(--amber)}
+.incident-card.resolved{border-left:4px solid var(--green)}
+.incident-card.published{border-left:4px solid var(--blue,#4f8ef7)}
+.incident-top{display:flex;flex-wrap:wrap;align-items:center;gap:8px}
+.incident-top h2{margin:0;font-size:15px;font-weight:600;flex:1;min-width:0;overflow-wrap:anywhere}
+.incident-top h2 a{text-decoration:none}
+.incident-top h2 a:hover{text-decoration:underline}
+.incident-top time{color:var(--muted);font-size:12px;white-space:nowrap}
+.state-chip{display:inline-flex;align-items:center;gap:5px;padding:1px 9px;border-radius:999px;font-size:11px;font-weight:600;white-space:nowrap}
+.state-chip::before{content:"";width:6px;height:6px;border-radius:50%;background:currentColor}
+.state-chip.pending{background:var(--badge);color:var(--muted)}
+.state-chip.active{background:var(--amber-soft);color:#b7791f}
+.state-chip.resolved{background:var(--green-soft);color:#13896a}
+.state-chip.published{background:var(--badge);color:var(--muted)}
+.kind-tag{padding:1px 7px;border-radius:4px;background:var(--badge);color:var(--muted);font-size:11px;white-space:nowrap}
+.pin-tag{padding:1px 7px;border-radius:4px;background:var(--amber-soft);color:#b7791f;font-size:11px}
+.incident-body{margin-top:8px;color:var(--ink);font-size:13px}
+.incident-body p{margin:8px 0}
+.incident-body h1,.incident-body h2,.incident-body h3{margin:12px 0 6px;font-size:14px}
+.incident-body ul,.incident-body ol{margin:8px 0;padding-left:22px}
+.incident-body code{background:var(--badge);border-radius:4px;padding:1px 5px;font-size:12px}
+.incident-body a{text-decoration:underline}
+.incident-body blockquote{margin:8px 0;padding-left:10px;border-left:3px solid var(--line);color:var(--muted)}
+.incident-body hr{border:0;border-top:1px solid var(--line);margin:12px 0}
+.timeline{list-style:none;margin:10px 0 0;padding:0 0 0 14px;border-left:1px solid var(--line)}
+.timeline li{position:relative;padding:0 0 10px 10px;color:var(--muted);font-size:12px;overflow-wrap:anywhere}
+.timeline li::before{content:"";position:absolute;left:-18px;top:5px;width:7px;height:7px;border-radius:50%;background:var(--line)}
+.timeline li.last::before{background:var(--green)}
+.timeline strong{display:block;color:var(--ink);font-size:13px;font-weight:550}
+.timeline-time{display:block;margin-top:1px}
+.timeline .md{margin-top:4px;color:var(--ink);font-size:13px}
+.detail-head{display:flex;flex-direction:column;gap:6px;padding:16px 16px 0}
+.detail-head h1{margin:0;font-size:20px}
+.detail-meta{display:flex;flex-wrap:wrap;gap:8px;align-items:center;color:var(--muted);font-size:12px}
+.detail-body{padding:12px 16px 16px;font-size:14px}
+.detail-body p{margin:10px 0}
+.detail-body ul,.detail-body ol{margin:8px 0;padding-left:24px}
+.detail-body code{background:var(--badge);border-radius:4px;padding:1px 5px}
+.detail-body h1,.detail-body h2,.detail-body h3{margin:16px 0 6px;font-size:15px}
+.back-link{display:inline-block;margin:14px 16px 0;color:var(--muted);text-decoration:none;font-size:13px}
+.back-link:hover{color:var(--ink)}
+.tags{display:flex;flex-wrap:wrap;gap:6px;padding:0 16px 16px}
+#history-detail .timeline{margin-bottom:16px}
+.tags span{padding:2px 8px;border-radius:999px;background:var(--badge);color:var(--muted);font-size:11px}
+.history-empty{padding:36px 16px;text-align:center;color:var(--muted)}
+.history-empty strong{display:block;color:var(--ink);margin-bottom:4px}
+.banner.maintenance{border-left-color:var(--blue);background:var(--blue-soft)}
+.banner-scope{margin-top:4px;color:var(--muted);font-size:12px;overflow-wrap:anywhere}
+.maintenance-tag,.state-chip.maintenance{background:var(--blue-soft);color:var(--blue)}
+.maintenance-tag{display:inline-flex;align-items:center;gap:5px;padding:1px 7px;border-radius:4px;font-size:12px;font-weight:550}
+.overall.maintenance{background:var(--blue)}
+.overall.maintenance h1{background:var(--blue-soft)}
+.group-head .icon.maintenance{background:var(--blue-soft);color:var(--blue)}
+.wrench{width:14px;height:14px;flex:none;vertical-align:middle}
+.incident-card.pending{border-left:4px solid var(--blue)}
+.incident-card.maintenance{border-left:4px solid var(--blue)}
+.state-chip.pending{background:var(--blue-soft);color:var(--blue)}
+</style>
+</head>
+<body>
+<div class="shell">
+  <header>
+    <a class="brand" href="#/"><span class="mark">S</span><span id="site-title">Status</span></a>
+    <nav aria-label="主导航">
+      <a href="#/" id="nav-home" aria-current="page">状态</a>
+      <a href="#/history" id="nav-history">历史</a>
+    </nav>
+    <button class="ghost" id="theme-btn" type="button">切换主题</button>
+  </header>
+  <div id="dynamics-error" class="error-box" role="alert" hidden><span></span><button class="ghost" type="button" data-retry="dynamics">重试</button></div>
+  <div id="banners"></div>
+
+  <main id="view-home">
+    <div id="status-error" class="error-box" role="alert" hidden><span></span><button class="ghost" type="button" data-retry="status">重试</button></div>
+    <section id="maintenance-banners" aria-label="维护窗口与预告" hidden></section>
+    <section class="overall unknown" id="overall">
+      <h1 id="overall-title">获取中…</h1>
+      <p id="overall-desc"></p>
+    </section>
+    <section class="card">
+      <div class="card-head">
+        <h2>服务状态</h2>
+        <span class="meta" id="window-meta"></span>
+      </div>
+      <div id="groups"></div>
+      <div class="legend">
+        <span><i></i>正常</span><span><i class="partial"></i>部分失败</span>
+        <span><i class="down"></i>故障</span><span><i class="nodata"></i>无数据</span>
+      </div>
+    </section>
+  </main>
+
+  <main id="view-history" hidden>
+    <div id="history-error" class="error-box" role="alert" hidden><span></span><button class="ghost" type="button" data-retry="dynamics">重试</button></div>
+    <section class="card">
+      <div id="history-list-view">
+        <div class="history-toolbar">
+          <div class="filters" id="filters" role="group" aria-label="筛选动态">
+            <button type="button" data-filter="all" aria-pressed="true">全部</button>
+            <button type="button" data-filter="active" aria-pressed="false">进行中</button>
+            <button type="button" data-filter="pending" aria-pressed="false">待开始 / 待发布</button>
+            <button type="button" data-filter="resolved" aria-pressed="false">已解决 / 已结束</button>
+            <button type="button" data-filter="notice" aria-pressed="false">公告</button>
+            <button type="button" data-filter="incident" aria-pressed="false">故障</button>
+            <button type="button" data-filter="maintenance" aria-pressed="false">维护</button>
+          </div>
+          <span class="history-count" id="historyCount"></span>
+        </div>
+        <div id="incidents"></div>
+      </div>
+      <div id="history-detail" hidden></div>
+    </section>
+  </main>
+
+  <footer id="footer"></footer>
+</div>
+
+<script>
+"use strict";
+const $ = (s) => document.querySelector(s);
+const state = { route: "home", data: null, dynamics: null, filter: "all", dynamicID: null };
+const requests = {};
+const statusNames = { ok: "正常", partial: "部分失败", down: "故障", nodata: "无数据" };
+const esc = (v) => String(v ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const statusKey = (v) => Object.prototype.hasOwnProperty.call(statusNames, v) ? v : "nodata";
+const activeMaintenance = (c) => c.maintenance?.state === "active" && c.maintenance.cancelled_at == null ? c.maintenance : null;
+const currentStatus = (c) => activeMaintenance(c) ? "partial" : statusKey(c.current_status);
+const isMaintenanceWindow = (d) => d.kind === "maintenance" && (d.source === "scheduled" || String(d.id).startsWith("m"));
+const wrenchIcon = '<svg class="wrench" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M21.7 7.3a6 6 0 0 1-8 7.8l-7.6 7.6a2.8 2.8 0 0 1-4-4l7.6-7.6a6 6 0 0 1 7.8-8l-3.8 3.8 3.4 3.4z"/></svg>';
+const fmtLat = (ms) => !Number.isFinite(ms) ? "—" : ms >= 1000 ? `${(ms / 1000).toFixed(2)} s` : `${Math.round(ms)} ms`;
+const fmtPct = (v) => Number.isFinite(v) ? `${v.toFixed(2)}%` : "—";
+const fmtTime = (ts) => {
+  if (!Number.isFinite(ts) || ts <= 0) return "—";
+  const date = new Date(ts * 1000);
+  return Number.isNaN(date.getTime()) ? "—" : date.toLocaleString("zh-CN", { hour12: false });
+};
+const fmtDur = (sec) => {
+  if (!Number.isFinite(sec)) return "—";
+  if (sec < 60) return `${Math.round(sec)} 秒`;
+  if (sec < 3600) return `${Math.round(sec / 60)} 分钟`;
+  if (sec < 86400) return `${(sec / 3600).toFixed(1)} 小时`;
+  return `${(sec / 86400).toFixed(1)} 天`;
+};
+const iconChar = (k) => k === "down" ? "×" : k === "partial" ? "!" : k === "nodata" ? "?" : "✓";
+
+async function getJSON(path, signal) {
+  const response = await fetch(path, { cache: "no-store", signal });
+  const text = await response.text();
+  let data;
+  try { data = JSON.parse(text); } catch { /* Show non-JSON server errors as text. */ }
+  if (!response.ok) throw new Error(data?.error || text.trim().slice(0, 300) || `HTTP ${response.status}`);
+  if (!data || typeof data !== "object") throw new Error("服务器返回的数据格式不正确");
+  return data;
+}
+
+async function loadResource(key, path, apply) {
+  requests[key]?.abort();
+  const controller = new AbortController();
+  requests[key] = controller;
+  const box = $(`#${key}-error`);
+  const retry = box.querySelector("button");
+  const target = $(key === "status" ? "#groups" : "#banners");
+  retry.disabled = true;
+  retry.textContent = "重试中…";
+  target.setAttribute("aria-busy", "true");
+  const timeout = setTimeout(() => controller.abort(), 20000);
+  try {
+    const data = await getJSON(path, controller.signal);
+    if (requests[key] !== controller) return;
+    apply(data);
+    box.hidden = true;
+  } catch (error) {
+    if (requests[key] !== controller) return;
+    const label = { status: "服务状态", dynamics: "公告与故障动态" }[key];
+    box.querySelector("span").textContent = `${label}加载失败：${controller.signal.aborted ? "请求超时" : error.message}。已有内容可能不是最新数据。`;
+    box.hidden = false;
+    if (key === "status") {
+      setFavicon("unknown");
+      $("#overall").className = "overall unknown";
+      $("#overall-title").textContent = "暂时无法获取服务状态";
+      $("#overall-desc").textContent = state.data ? "以下为上次获取的数据，请点击重试。" : "请点击重试。";
+    }
+    if (key === "dynamics" && !state.dynamics) {
+      $("#incidents").textContent = "动态加载失败，请点击上方重试按钮。";
+    }
+  } finally {
+    clearTimeout(timeout);
+    if (requests[key] === controller) {
+      delete requests[key];
+      retry.disabled = false;
+      retry.textContent = "重试";
+      target.setAttribute("aria-busy", "false");
+    }
+  }
+}
+
+function loadStatus() {
+  return loadResource("status", "/api/status", data => {
+    if (!Array.isArray(data.channels)) throw new Error("渠道数据格式不正确");
+    state.data = data;
+    renderHome();
+  });
+}
+
+function loadDynamics() {
+  return loadResource("dynamics", "/api/dynamics", data => {
+    if (!Array.isArray(data)) throw new Error("动态数据格式不正确");
+    state.dynamics = data;
+    renderBanners();
+    if (state.route === "history") {
+      if (state.dynamicID) renderDynamicDetail(state.dynamicID);
+      else renderHistory();
+    }
+  });
+}
+
+function textElement(tag, className, text) {
+  const el = document.createElement(tag);
+  el.className = className;
+  el.textContent = text;
+  return el;
+}
+
+/* 横幅只展示一行摘要，把 Markdown 语法去掉换成纯文本。 */
+function plainText(text) {
+  return String(text ?? "")
+    .replace(/```[\s\S]*?```/g, " ")
+    .replace(/[*_`>#]/g, "")
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function stateName(d) {
+  if (isMaintenanceWindow(d)) return { pending: "待开始", active: "维护中", resolved: "已结束" }[d.state] || "维护";
+  return { pending: "待发布", active: "进行中", resolved: "已解决", published: "已发布" }[d.state] || "已发布";
+}
+function kindName(d) {
+  return { notice: "公告", incident: "故障", maintenance: "维护" }[d.kind] || "公告";
+}
+
+function renderBanners() {
+  const list = state.dynamics || [];
+  const items = [];
+  for (const d of list.filter(x => !isMaintenanceWindow(x) && x.kind !== "incident" && (x.pinned || x.state === "published")).slice(0, 3)) {
+    const banner = textElement("a", `banner ${d.state === "resolved" ? "info" : "active"}`, "");
+    banner.href = `#/history/${encodeURIComponent(d.id)}`;
+    const content = textElement("div", "banner-content", "");
+    const heading = textElement("div", "banner-heading", "");
+    heading.append(textElement("span", "banner-title", `${d.pinned ? "置顶 · " : ""}${d.title || ""}`),
+      textElement("span", "banner-time", fmtTime(d.start_at)));
+    content.append(heading);
+    const summary = plainText(d.body);
+    if (summary) content.append(textElement("p", "banner-body", summary.slice(0, 160)));
+    banner.append(content);
+    items.push(banner);
+  }
+  for (const d of list.filter(x => x.kind === "incident" && x.state !== "resolved").slice(0, 2)) {
+    const banner = textElement("a", "banner active", "");
+    banner.href = `#/history/${encodeURIComponent(d.id)}`;
+    const content = textElement("div", "banner-content", "");
+    content.append(textElement("div", "banner-title", `${d.title}：${plainText(d.body)}`),
+      textElement("div", "banner-time", `${d.source === "manual" ? "手动" : "自动"} · 始于 ${fmtTime(d.start_at)}`));
+    banner.append(content);
+    items.push(banner);
+  }
+  $("#banners").replaceChildren(...items);
+}
+
+function maintenanceScope(window, channels) {
+  if (window.all_channels) return "所有服务";
+  return (window.channel_ids || []).map(id => {
+    const channel = channels.find(c => c.id === id);
+    return channel ? channel.name : id;
+  }).join("、") || "未指定渠道";
+}
+
+function renderMaintenanceBanners(data) {
+  const windows = Array.isArray(data.maintenance) ? data.maintenance : [];
+  const items = windows.filter(window => window.cancelled_at == null && ["active", "scheduled"].includes(window.state)).map(window => {
+    const banner = textElement("a", "banner maintenance", "");
+    banner.href = `#/history/${encodeURIComponent("m" + window.id)}`;
+    const content = textElement("div", "banner-content", "");
+    const heading = textElement("div", "banner-heading", "");
+    heading.append(textElement("span", "maintenance-tag", window.state === "active" ? "维护中" : "维护预告"),
+      textElement("span", "banner-title", window.title || "服务维护"),
+      textElement("span", "banner-time", `开始：${fmtTime(window.start_at)} · 结束：${fmtTime(window.end_at)}`));
+    content.append(heading, textElement("div", "banner-scope", `范围：${maintenanceScope(window, data.channels || [])}`));
+    if (window.body) content.append(textElement("p", "banner-body", window.body));
+    banner.append(content);
+    return banner;
+  });
+  $("#maintenance-banners").replaceChildren(...items);
+  $("#maintenance-banners").hidden = !items.length;
+}
+
+function fixedBuckets(channel, data) {
+  const buckets = (Array.isArray(channel.buckets) ? channel.buckets : []).slice(-90);
+  const step = Number(data.bucket_seconds) > 0 ? Number(data.bucket_seconds) : 300;
+  const generated = Number(data.generated_at);
+  const end = Number.isFinite(generated) && generated > 0 ? Math.floor(generated / step) * step : 0;
+  const first = buckets.length ? Number(buckets[0].ts) : end + step;
+  const missing = Math.max(0, 90 - buckets.length);
+  const fill = Array.from({ length: missing }, (_, index) => ({ ts: first - (missing - index) * step, status: "nodata", probes: 0 }));
+  return fill.concat(buckets);
+}
+
+function barTitle(b) {
+  if (!b.probes) return `${fmtTime(b.ts)} · 无数据`;
+  return `${fmtTime(b.ts)} · ${statusNames[statusKey(b.status)]} · ${b.probes} 次探测 · 响应耗时 ${fmtLat(b.latency_ms)}`;
+}
+
+function renderHome() {
+  const d = state.data;
+  if (!d) return;
+  $("#site-title").textContent = d.site?.title || "Status";
+  document.title = d.site?.title || "Status";
+  $("#footer").textContent = d.site?.description || "";
+  $("#window-meta").textContent = `最近 ${fmtDur(90 * (d.bucket_seconds || 300))} · 90 格 · 每格 ${(d.bucket_seconds || 300) / 60} 分钟`;
+
+  const chans = Array.isArray(d.channels) ? d.channels : [];
+  renderMaintenanceBanners(d);
+  const maintained = chans.filter(activeMaintenance);
+  const others = chans.filter(c => !activeMaintenance(c));
+  const keys = chans.map(currentStatus);
+  let overall = "ok";
+  if (!chans.length || keys.every(k => k === "nodata")) overall = "nodata";
+  else if (keys.includes("down")) overall = "down";
+  else if (keys.includes("partial") || keys.includes("nodata")) overall = "partial";
+  const maintenanceOnly = maintained.length > 0 && others.every(c => currentStatus(c) === "ok");
+  $("#overall").className = "overall " + (maintenanceOnly ? "maintenance" : { ok: "", partial: "degraded", down: "outage", nodata: "unknown" }[overall]);
+  const titles = { ok: "所有服务运行正常", partial: "部分服务异常或暂无数据", down: "服务故障", nodata: "暂无当前探测数据" };
+  $("#overall-title").textContent = maintenanceOnly ? "服务维护中" : `${iconChar(overall)} ${titles[overall]}`;
+  const details = [maintained.length ? `维护中：${maintained.map(c => c.name).join("、")}` : "", ...["down", "partial", "nodata"].map(k => {
+    const names = others.filter(c => currentStatus(c) === k).map(c => c.name);
+    return names.length ? `${statusNames[k]}：${names.join("、")}` : "";
+  })].filter(Boolean);
+  $("#overall-desc").textContent = details.join("；") || d.site?.description || "当前状态依据各渠道最新探测结果。";
+  setFavicon(maintenanceOnly ? "maintenance" : overall);
+
+  $("#groups").innerHTML = chans.map(c => {
+    const k = currentStatus(c);
+    const window = activeMaintenance(c);
+    const buckets = fixedBuckets(c, d);
+    const bars = buckets.map(b => `<div class="bar ${statusKey(b.status)}" title="${esc(barTitle(b))}"></div>`).join("");
+    const ttft = c.type === "openai" || c.type === "mock" ? ` · 首字 TTFT ${fmtLat(c.avg_ttft_ms)}` : "";
+    const players = c.players != null
+      ? ` · 玩家 ${esc(c.players)}${c.max_players != null ? `/${esc(c.max_players)}` : ""}` : "";
+    const spark = playersSpark(buckets);
+    return `<div class="group">
+      <div class="group-head">
+        <span class="icon ${window ? "maintenance" : k}" role="img" aria-label="${window ? "维护中" : statusNames[k]}">${window ? wrenchIcon : iconChar(k)}</span>
+        <h3>${esc(c.name)}</h3>
+        ${window ? '<span class="maintenance-tag">维护中</span>' : ""}
+        <span class="uptime">${fmtPct(c.availability)} 可用 · 响应耗时 ${fmtLat(c.avg_latency_ms)}${ttft}${players}</span>
+      </div>
+      <div class="bars" role="img" aria-label="最近 90 格探测历史">${bars}</div>
+      ${spark}
+      <div class="stats"><span>当前：${window ? `维护中 · ${esc(window.title)}（预计结束 ${fmtTime(window.end_at)}）` : statusNames[k]}</span><span>最近探测：${fmtTime(c.last_probe_at)}</span><span>窗口内探测 ${esc(c.probes ?? 0)} 次</span><span>${esc(c.group)}</span></div>
+    </div>`;
+  }).join("") || `<div class="empty">还没有配置任何监控渠道</div>`;
+}
+
+/* 玩家数趋势：minecraft/steam 渠道的桶里有 players_avg，画一条迷你曲线；数值全部来自接口数字字段。 */
+function playersSpark(buckets) {
+  const series = buckets.map(b => (b.players_avg == null || !Number.isFinite(Number(b.players_avg))) ? null : Number(b.players_avg));
+  if (!series.some(v => v != null)) return "";
+  const known = series.filter(v => v != null);
+  const max = Math.max(...known, 1);
+  const width = 900, height = 28, pad = 2;
+  const step = series.length > 1 ? width / (series.length - 1) : 0;
+  const y = v => height - pad - (v / max) * (height - pad * 2);
+  let segments = [], current = [];
+  series.forEach((v, i) => {
+    if (v == null) { if (current.length) { segments.push(current); current = []; } return; }
+    current.push(`${(i * step).toFixed(1)},${y(v).toFixed(1)}`);
+  });
+  if (current.length) segments.push(current);
+  const lines = segments.map(points => `<polyline points="${points.join(" ")}"/>`).join("");
+  const area = segments.map(points => `0,${height} ${points.join(" ")} ${((series.length - 1) * step).toFixed(1)},${height}`).join(" ");
+  const peak = Math.max(...known);
+  const latestKnown = series.reduce((last, v, i) => v == null ? last : { v, ts: buckets[i].ts }, null);
+  return `<div class="spark-wrap"><svg class="spark" viewBox="0 0 ${width} ${height}" preserveAspectRatio="none" role="img" aria-label="玩家数趋势：峰值 ${peak}"><title>玩家数趋势 · 峰值 ${peak}${latestKnown ? ` · 最近 ${latestKnown.v} 人` : ""}</title><polygon class="spark-area" points="${area}"/>${lines}</svg><span class="spark-peak">峰值 ${peak} 人</span></div>`;
+}
+
+/* ---- minimal, safe markdown: escapes first, then a small whitelist ---- */
+function mdBlock(text) {
+  const source = String(text ?? "");
+  const lines = source.split(/\r?\n/);
+  const out = [];
+  let list = null;
+  let para = [];
+  const flushPara = () => {
+    if (para.length) { out.push(`<p>${inlineMd(para.join(" "))}</p>`); para = []; }
+  };
+  const flushList = () => {
+    if (list) { out.push(`<${list.tag}>${list.items.map(i => `<li>${inlineMd(i)}</li>`).join("")}</${list.tag}>`); list = null; }
+  };
+  for (const raw of lines) {
+    const line = raw.trimEnd();
+    if (!line.trim()) { flushPara(); flushList(); continue; }
+    if (/^```/.test(line)) { flushPara(); flushList(); continue; }
+    const heading = /^(#{1,4})\s+(.*)$/.exec(line);
+    if (heading) { flushPara(); flushList(); out.push(`<h${heading[1].length}>${inlineMd(heading[2])}</h${heading[1].length}>`); continue; }
+    if (/^(-{3,}|\*{3,})$/.test(line)) { flushPara(); flushList(); out.push("<hr>"); continue; }
+    const quote = /^>\s?(.*)$/.exec(line);
+    if (quote) { flushPara(); flushList(); out.push(`<blockquote>${inlineMd(quote[1])}</blockquote>`); continue; }
+    const ul = /^[-*+]\s+(.*)$/.exec(line);
+    const ol = /^\d+[.)]\s+(.*)$/.exec(line);
+    if (ul || ol) {
+      flushPara();
+      const tag = ul ? "ul" : "ol";
+      if (!list || list.tag !== tag) { flushList(); list = { tag, items: [] }; }
+      list.items.push((ul || ol)[1]);
+      continue;
+    }
+    flushList();
+    para.push(line);
+  }
+  flushPara(); flushList();
+  return out.join("") || `<p>${inlineMd(source)}</p>`;
+}
+
+function inlineMd(text) {
+  let out = esc(text);
+  out = out.replace(/`([^`]+)`/g, "<code>$1</code>");
+  out = out.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
+  out = out.replace(/(^|[^*])\*([^*]+)\*/g, "$1<em>$2</em>");
+  out = out.replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g,
+    '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>');
+  return out;
+}
+
+function dynamicMatches(d) {
+  if (state.filter === "all") return true;
+  if (["pending", "active", "resolved"].includes(state.filter)) return d.state === state.filter;
+  return d.kind === state.filter;
+}
+
+function renderHistory() {
+  const list = (state.dynamics || []).filter(dynamicMatches);
+  $("#history-detail").hidden = true;
+  $("#history-list-view").hidden = false;
+  $("#historyCount").textContent = `共 ${list.length} 条`;
+  document.querySelectorAll("#filters button").forEach(b =>
+    b.setAttribute("aria-pressed", String(b.dataset.filter === state.filter)));
+
+  if (!list.length) {
+    $("#incidents").innerHTML = `<div class="history-empty"><strong>暂无动态</strong><p>没有符合筛选条件的记录。</p></div>`;
+    return;
+  }
+  const byDay = new Map();
+  for (const d of list) {
+    const day = new Date(d.start_at * 1000);
+    const key = `${d.pinned ? "pin" : "reg"}|${day.getFullYear()}-${day.getMonth()}-${day.getDate()}`;
+    if (!byDay.has(key)) byDay.set(key, []);
+    byDay.get(key).push(d);
+  }
+  let lastShownDay = null;
+  $("#incidents").innerHTML = [...byDay.values()].map(items => {
+    const day = new Date(items[0].start_at * 1000);
+    const dayKey = `${day.getFullYear()}-${day.getMonth()}-${day.getDate()}`;
+    const dateBlock = dayKey === lastShownDay
+      ? '<div class="incident-date" aria-hidden="true"></div>'
+      : `<div class="incident-date"><strong>${String(day.getDate()).padStart(2, "0")}</strong><span>日</span><span>周${"日一二三四五六"[day.getDay()]}</span></div>`;
+    lastShownDay = dayKey;
+    const cards = items.map(d => {
+      const ups = (d.updates || []).slice().sort((a, b) => a.at - b.at);
+      return `<article class="incident-card ${esc(d.state)}${d.kind === "maintenance" ? " maintenance" : ""}${d.pinned ? " pinned" : ""}">
+        <div class="incident-top">
+          <span class="state-chip ${esc(d.state)}${d.kind === "maintenance" ? " maintenance" : ""}">${stateName(d)}</span>
+          <span class="kind-tag">${kindName(d)}</span>
+          <h2><a href="#/history/${encodeURIComponent(d.id)}">${esc(d.title)}</a></h2>
+          ${d.pinned ? '<span class="pin-tag">置顶</span>' : ""}
+          <time>${fmtTime(d.start_at)}${d.end_at ? " – " + fmtTime(d.end_at) : ""}</time>
+        </div>
+        ${isMaintenanceWindow(d) && (d.services || []).length ? `<div class="banner-scope">范围：${d.services.map(esc).join("、")}</div>` : ""}
+        ${d.body ? `<div class="incident-body">${mdBlock(d.body)}</div>` : ""}
+        ${ups.length ? `<ul class="timeline">${ups.map((u, i) => `<li class="${i === ups.length - 1 && d.state === "resolved" ? "last" : ""}"><strong>${esc(u.label)}</strong><span class="timeline-time">${fmtTime(u.at)}</span>${u.body ? `<div class="md">${mdBlock(u.body)}</div>` : ""}</li>`).join("")}</ul>` : ""}
+      </article>`;
+    }).join("");
+    return `<section class="incident-day">${dateBlock}<div class="incident-list">${cards}</div></section>`;
+  }).join("");
+}
+
+function renderDynamicDetail(rawID) {
+  const d = (state.dynamics || []).find(x => x.id === rawID);
+  const root = $("#history-detail");
+  $("#history-list-view").hidden = true;
+  root.hidden = false;
+  if (!d) {
+    root.innerHTML = `<div class="history-empty"><strong>找不到这条动态</strong><p>它可能已被删除。</p><a class="back-link" href="#/history">← 返回动态</a></div>`;
+    return;
+  }
+  const ups = (d.updates || []).slice().sort((a, b) => a.at - b.at);
+  const when = d.end_at ? `${fmtTime(d.start_at)} – ${fmtTime(d.end_at)}` : `${fmtTime(d.start_at)} – 至今`;
+  root.innerHTML = `<a class="back-link" href="#/history">← 返回动态</a>
+    <div class="detail-head">
+      <h1>${esc(d.title)}</h1>
+      <div class="detail-meta">
+        <span class="state-chip ${esc(d.state)}${d.kind === "maintenance" ? " maintenance" : ""}">${stateName(d)}</span>
+        <span class="kind-tag">${kindName(d)}</span>
+        <span>${esc(when)}</span>
+      </div>
+    </div>
+    <div class="detail-body">${mdBlock(d.body || "")}</div>
+    ${(d.services || []).length ? `<div class="tags">${d.services.map(s => `<span>影响：${esc(s)}</span>`).join("")}</div>` : ""}
+    ${ups.length ? `<div class="detail-body"><h2 style="font-size:14px;margin:0 0 8px">更新记录</h2><ul class="timeline">${ups.map((u, i) => `<li class="${i === ups.length - 1 && d.state === "resolved" ? "last" : ""}"><strong>${esc(u.label)}</strong><span class="timeline-time">${fmtTime(u.at)}</span>${u.body ? `<div class="md">${mdBlock(u.body)}</div>` : ""}</li>`).join("")}</ul></div>` : ""}`;
+}
+
+function route() {
+  const hash = location.hash.replace(/^#/, "") || "/";
+  const detail = /^\/history\/([^/]+)$/.exec(hash);
+  state.route = hash.startsWith("/history") ? "history" : "home";
+  state.dynamicID = detail ? detail[1] : null;
+  if (state.dynamicID) {
+    try { state.dynamicID = decodeURIComponent(state.dynamicID); } catch { /* Keep malformed links from interrupting initialization. */ }
+  }
+  document.body.classList.toggle("history-page", state.route === "history");
+  $("#view-home").hidden = state.route !== "home";
+  $("#view-history").hidden = state.route !== "history";
+  for (const name of ["home", "history"]) {
+    const link = $(`#nav-${name}`);
+    if (state.route === name) link.setAttribute("aria-current", "page");
+    else link.removeAttribute("aria-current");
+  }
+  if (state.route === "history") {
+    if (state.dynamicID) {
+      if (state.dynamics) renderDynamicDetail(state.dynamicID);
+    } else if (state.dynamics) {
+      renderHistory();
+    }
+  }
+  window.scrollTo(0, 0);
+}
+
+// 标签页图标颜色跟随整体状态（和参考站一致）。
+function setFavicon(overall) {
+  const colors = { unknown: "#9ca3af", ok: "#24c19a", partial: "#fbbf24", down: "#f5785c", maintenance: "#2465c8" };
+  const color = Object.prototype.hasOwnProperty.call(colors, overall) ? colors[overall] : colors.unknown;
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><rect x="1" y="1" width="14" height="14" rx="4" fill="${color}"/></svg>`;
+  let link = document.querySelector("link[rel='icon']");
+  if (!link) {
+    link = document.createElement("link");
+    link.rel = "icon";
+    document.head.appendChild(link);
+  }
+  link.href = "data:image/svg+xml," + encodeURIComponent(svg);
+}
+
+function setTheme(theme) {
+  document.documentElement.dataset.theme = theme;
+  $("#theme-btn").textContent = theme === "dark" ? "明亮模式" : "深色模式";
+  $("#theme-btn").setAttribute("aria-label", `切换到${theme === "dark" ? "明亮" : "深色"}模式`);
+}
+$("#theme-btn").onclick = () => {
+  const theme = document.documentElement.dataset.theme === "dark" ? "light" : "dark";
+  setTheme(theme);
+  try { localStorage.setItem("theme", theme); } catch { /* Theme still works without storage. */ }
+};
+$("#filters").addEventListener("click", event => {
+  const button = event.target.closest("[data-filter]");
+  if (!button) return;
+  state.filter = button.dataset.filter;
+  if (state.dynamicID) location.hash = "#/history";
+  else renderHistory();
+});
+const loaders = { status: loadStatus, dynamics: loadDynamics };
+document.querySelectorAll("[data-retry]").forEach(button => button.onclick = () => loaders[button.dataset.retry]());
+
+function refresh() {
+  loadStatus();
+  loadDynamics();
+}
+(function init() {
+  let saved;
+  try { saved = localStorage.getItem("theme"); } catch { /* Use the system theme. */ }
+  setTheme(saved === "dark" || saved === "light" ? saved : matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+  setFavicon("unknown");
+  window.addEventListener("hashchange", route);
+  route();
+  loadStatus();
+  loadDynamics();
+  setInterval(() => { if (!document.hidden) refresh(); }, 60000);
+  document.addEventListener("visibilitychange", () => { if (!document.hidden) refresh(); });
+})();
+</script>
+</body>
+</html>
