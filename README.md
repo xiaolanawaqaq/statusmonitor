@@ -412,7 +412,7 @@ export ADMIN_TOKEN='你的管理员令牌'
 ./run.sh
 ```
 
-脚本从项目根目录启动，默认配置为 `config.yaml`，相对数据库路径从项目根目录解析。设置 `STATUS_CONFIG` 可使用另一份配置；`ADDR` 仅在显式设置时覆盖 `server.addr`。有 Go 工具链时，每次启动先编译到临时文件再原子替换二进制，确保静态页面和所有源码更新都生效；无 Go 时使用已编译的 `status-monitor`。
+脚本从项目根目录启动，默认配置为 `config.yaml`，相对数据库路径从项目根目录解析。设置 `STATUS_CONFIG` 可使用另一份配置；`ADDR` 仅在显式设置时覆盖 `server.addr`。项目根目录存在 `.env` 时会自动加载（适合放 `ADMIN_TOKEN`，已加入 `.gitignore`）。有 Go 工具链时，仅当 `app/` 内有文件比二进制新才重新编译，并原子替换二进制；无 Go 时使用已编译的 `status-monitor`。
 
 需要单独构建：
 
@@ -457,24 +457,46 @@ server {
 
 ```ini
 [Unit]
-Description=Status Monitor
-After=network.target
+Description=Service status monitor
+After=network-online.target
+Wants=network-online.target
 
 [Service]
 Type=simple
-User=www-data
 WorkingDirectory=/opt/status-monitor
-EnvironmentFile=/etc/status-monitor.env
-ExecStart=/opt/status-monitor/status-monitor -config config.yaml -addr 127.0.0.1:18080
+EnvironmentFile=/opt/status-monitor/.env
+Environment=STATUS_CONFIG=/opt/status-monitor/config.local.yaml
+Environment=HOME=/root
+ExecStart=/opt/status-monitor/run.sh
 Restart=always
+RestartSec=5
+TimeoutStopSec=20
 
 [Install]
 WantedBy=multi-user.target
 ```
 
+`HOME` 必须设置，否则有 Go 工具链时编译会因找不到模块缓存失败。`run.sh` 会在启动时加载 `.env`，所以 `ADMIN_TOKEN` 放在里面即可，不必写进 unit。
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable --now status-monitor
+sudo systemctl status status-monitor
+```
+
+### 数据库备份
+
+```bash
+./backup.sh                      # 备份 data/status.db 到 data/backups/
+BACKUP_DIR=/mnt/backup ./backup.sh
+./backup.sh /path/to/other.db    # 指定其他数据库
+```
+
+使用 SQLite 在线备份 API，服务运行中也能得到一致快照；备份完成后对副本做 `PRAGMA integrity_check`，文件权限为 600，目录为 700。脚本不会自动删除旧备份。
+
 ### 探测项目自身时的注意事项
 
-systemd 示例需要服务账号对项目 `data/` 有读写权限；`/etc/status-monitor.env` 由部署者创建并填写 `ADMIN_TOKEN=...` 及可选 Telegram 环境变量。同一个数据库只启动一个监控实例，升级时使用该实例的服务管理器重启。
+服务账号需要对项目 `data/` 有读写权限；`ADMIN_TOKEN` 及可选 Telegram 环境变量写入项目根目录的 `.env`。同一个数据库只启动一个监控实例，升级时用服务管理器重启。
 
 - GPT/DeepSeek 等渠道探测失败但接口返回 401/402 时，会记成"故障"——这是预期行为，
   能反映 key 失效或余额不足。
