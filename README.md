@@ -42,8 +42,9 @@ go run . -config ../config.yaml -addr :8000
 
 打开 <http://localhost:8000>，管理后台 <http://localhost:8000/admin>。
 
-默认配置里 `demo-*` 是 mock 渠道，启动即出数据；`gpt` / `deepseek` 需要设置
-`OPENAI_API_KEY` / `DEEPSEEK_API_KEY` 才会探测成功。
+默认配置里 `gpt` / `deepseek` 需要设置 `OPENAI_API_KEY` / `DEEPSEEK_API_KEY` 才会探测成功，
+未设置时显示「无数据」而不是故障。想先跑通整套流程，可以临时加一个 `type: mock` 的本地模拟渠道，
+它在没有外部依赖的情况下产生延迟和随机失败。
 
 ## 配置说明
 

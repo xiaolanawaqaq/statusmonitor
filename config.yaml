@@ -141,27 +141,3 @@ channels:
       host: "127.0.0.1"
       port: 22
       expect: "SSH-2.0"
-
-  - id: demo-gpt
-    name: "演示 GPT"
-    group: "演示"
-    type: mock
-    config:
-      latency_ms: [600, 1800]
-      fail_rate: 0.02
-
-  - id: demo-gemini
-    name: "演示 Gemini"
-    group: "演示"
-    type: mock
-    config:
-      latency_ms: [900, 2500]
-      fail_rate: 0.08
-
-  - id: demo-kimi
-    name: "演示 Kimi"
-    group: "演示"
-    type: mock
-    config:
-      latency_ms: [1500, 4500]
-      fail_rate: 0.15
