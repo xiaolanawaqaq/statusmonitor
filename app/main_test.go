@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -334,5 +335,24 @@ func TestHealthAllowsStartupGrace(t *testing.T) {
 	defer resp.Body.Close()
 	if resp.StatusCode != 200 {
 		t.Fatalf("startup grace status = %d", resp.StatusCode)
+	}
+}
+
+func TestPublicStateIsBounded(t *testing.T) {
+	c := newPublicCache(10)
+	now := time.Now()
+	for i := 0; i < 1000; i++ {
+		c.put("GET /v1/status?x="+strconv.Itoa(i), cacheEntry{body: []byte("x"), status: 200, at: now}, now)
+	}
+	if len(c.m) > 256 {
+		t.Fatalf("cache entries = %d, want <= 256", len(c.m))
+	}
+
+	l := newPublicLimiter(120)
+	for i := 0; i < 6000; i++ {
+		l.allow("10.0."+strconv.Itoa(i/256)+"."+strconv.Itoa(i%256), now)
+	}
+	if len(l.buckets) > 4096 {
+		t.Fatalf("limiter buckets = %d, want <= 4096", len(l.buckets))
 	}
 }

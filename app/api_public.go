@@ -29,11 +29,16 @@ func newPublicLimiter(rpm int) *publicLimiter {
 func (l *publicLimiter) allow(ip string, now time.Time) (ok bool, remaining int, retryAfter int) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	if len(l.buckets) > 4096 {
+	if len(l.buckets) >= 4096 {
 		for k, b := range l.buckets {
 			if now.Sub(b.last) > 10*time.Minute {
 				delete(l.buckets, k)
 			}
+		}
+		// 仍然满载说明是短时间内的新来源洪泛：清空计数表，宁可让本轮限流从零开始，
+		// 也不让内存被任意伪造的来源无限增长。
+		if len(l.buckets) >= 4096 {
+			l.buckets = make(map[string]*limiterBucket)
 		}
 	}
 	rate := float64(l.rpm) / 60.0
@@ -87,11 +92,15 @@ func (c *publicCache) get(key string, now time.Time) (cacheEntry, bool) {
 func (c *publicCache) put(key string, e cacheEntry, now time.Time) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	if len(c.m) > 256 {
+	if _, exists := c.m[key]; !exists && len(c.m) >= 256 {
 		for k, old := range c.m {
 			if now.Sub(old.at) > 2*c.ttl {
 				delete(c.m, k)
 			}
+		}
+		// 大量不同查询串同样能撑大缓存；满载时整体丢弃，缓存本来就是可重建的。
+		if len(c.m) >= 256 {
+			c.m = make(map[string]cacheEntry)
 		}
 	}
 	c.m[key] = e
