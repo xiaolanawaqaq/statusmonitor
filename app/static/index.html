@@ -70,6 +70,7 @@ button{font:inherit;color:inherit;cursor:pointer}
 .spark{width:min(420px,55%);height:28px;flex:0 1 auto}
 .spark polyline{fill:none;stroke:var(--green);stroke-width:1.5;stroke-linejoin:round}
 .spark polygon{fill:var(--green);opacity:.14;stroke:none}
+.spark circle{fill:var(--green);stroke:none}
 .spark-peak{color:var(--muted);font-size:11px;font-variant-numeric:tabular-nums}
 .legend{display:flex;flex-wrap:wrap;gap:6px 16px;padding:10px 16px;border-top:.5px solid var(--soft-line);color:var(--muted);font-size:12px}
 .legend span{display:inline-flex;align-items:center;gap:5px}
@@ -512,18 +513,27 @@ function playersSpark(buckets) {
   const max = Math.max(...known, 1);
   const width = 900, height = 28, pad = 2;
   const step = series.length > 1 ? width / (series.length - 1) : 0;
+  const x = i => i * step;
   const y = v => height - pad - (v / max) * (height - pad * 2);
   let segments = [], current = [];
   series.forEach((v, i) => {
     if (v == null) { if (current.length) { segments.push(current); current = []; } return; }
-    current.push(`${(i * step).toFixed(1)},${y(v).toFixed(1)}`);
+    current.push({ x: x(i), y: y(v) });
   });
   if (current.length) segments.push(current);
-  const lines = segments.map(points => `<polyline points="${points.join(" ")}"/>`).join("");
-  const area = segments.map(points => `0,${height} ${points.join(" ")} ${((series.length - 1) * step).toFixed(1)},${height}`).join(" ");
+  const pts = seg => seg.map(p => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(" ");
+  // 每段单独填充，缺口处留白，避免阴影跨过没有数据的时间段。
+  const areas = segments.map(seg => {
+    const left = seg[0].x.toFixed(1), right = seg[seg.length - 1].x.toFixed(1);
+    return `<polygon points="${left},${height} ${pts(seg)} ${right},${height}"/>`;
+  }).join("");
+  // 单点没有连线可画，用圆点标出，否则会完全看不见。
+  const lines = segments.map(seg => seg.length === 1
+    ? `<circle cx="${seg[0].x.toFixed(1)}" cy="${seg[0].y.toFixed(1)}" r="2"/>`
+    : `<polyline points="${pts(seg)}"/>`).join("");
   const peak = Math.max(...known);
   const latestKnown = series.reduce((last, v, i) => v == null ? last : { v, ts: buckets[i].ts }, null);
-  return `<div class="spark-wrap"><svg class="spark" viewBox="0 0 ${width} ${height}" preserveAspectRatio="none" role="img" aria-label="玩家数趋势：峰值 ${peak}"><title>玩家数趋势 · 峰值 ${peak}${latestKnown ? ` · 最近 ${latestKnown.v} 人` : ""}</title><polygon class="spark-area" points="${area}"/>${lines}</svg><span class="spark-peak">峰值 ${peak} 人</span></div>`;
+  return `<div class="spark-wrap"><svg class="spark" viewBox="0 0 ${width} ${height}" preserveAspectRatio="none" role="img" aria-label="玩家数趋势：峰值 ${peak}"><title>玩家数趋势 · 峰值 ${peak}${latestKnown ? ` · 最近 ${latestKnown.v} 人` : ""}</title>${areas}${lines}</svg><span class="spark-peak">峰值 ${peak} 人</span></div>`;
 }
 
 /* ---- minimal, safe markdown: escapes first, then a small whitelist ---- */
