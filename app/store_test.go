@@ -399,3 +399,51 @@ func TestBucketPlayersAverage(t *testing.T) {
 		}
 	}
 }
+
+func TestDisablingChannelResolvesOpenIncident(t *testing.T) {
+	s := newTestStore(t)
+	ch := Channel{ID: "game", Name: "Game", Group: "游戏", Type: "mock", Config: map[string]any{}}
+	if err := s.UpsertChannel(ch); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.OpenIncident("game", "游戏", "connection failed"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.OpenManualIncident("game", "游戏", "手动维护记录"); err != nil {
+		t.Fatal(err)
+	}
+	open, err := s.OpenIncidentFor("game")
+	if err != nil || open == nil {
+		t.Fatalf("expected an open automatic incident: %+v %v", open, err)
+	}
+
+	// A disabled channel is no longer probed, so its automatic incident must not
+	// stay open forever on the public timeline.
+	disabled := false
+	ch.Enabled = &disabled
+	if err := s.UpsertChannel(ch); err != nil {
+		t.Fatal(err)
+	}
+	if open, err := s.OpenIncidentFor("game"); err != nil || open != nil {
+		t.Fatalf("automatic incident still open after disable: %+v %v", open, err)
+	}
+	// Manual incidents are operator records and must survive unrelated changes.
+	var manualOpen int
+	if err := s.db.QueryRow(
+		`SELECT COUNT(*) FROM incidents WHERE channel_id = 'game' AND resolved_at IS NULL AND source = 'manual'`).Scan(&manualOpen); err != nil {
+		t.Fatal(err)
+	}
+	if manualOpen != 1 {
+		t.Fatalf("manual incident count = %d, want 1", manualOpen)
+	}
+
+	// Re-enabling must not resurrect the resolved incident.
+	enabled := true
+	ch.Enabled = &enabled
+	if err := s.UpsertChannel(ch); err != nil {
+		t.Fatal(err)
+	}
+	if open, err := s.OpenIncidentFor("game"); err != nil || open != nil {
+		t.Fatalf("resolved incident reopened on enable: %+v %v", open, err)
+	}
+}

@@ -293,7 +293,14 @@ func (s *Store) UpsertChannel(ch Channel) error {
 		   sort = excluded.sort`,
 		ch.ID, ch.Name, groupOr(ch.Group), ch.Type, ch.ConfigJSON(), enabled, sort,
 	)
-	return err
+	if err != nil {
+		return err
+	}
+	if enabled == 0 {
+		// 停用后不再探测，未关闭的自动故障事件不会再有恢复探测来结束它。
+		return s.ResolveIncident(ch.ID)
+	}
+	return nil
 }
 
 func (s *Store) DeleteChannel(id string) error {
