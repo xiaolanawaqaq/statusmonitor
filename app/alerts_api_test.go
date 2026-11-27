@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -95,5 +96,35 @@ func TestAdminNotificationTargetsAndPartialResult(t *testing.T) {
 	cfg.Alerts.Enabled = false
 	if code, _ := request("POST", "/api/admin/alerts/test", `{}`, adminTok); code != 400 {
 		t.Fatal("disabled alerts should not send")
+	}
+}
+
+func TestAdminAlertsExposeLastDelivery(t *testing.T) {
+	setupPublicAPI(t, APIConfig{})
+	oldToken := adminTok
+	adminTok = "delivery-test-token"
+	t.Cleanup(func() { adminTok = oldToken })
+	alertStatusMu.Lock()
+	alertStatus = nil
+	alertStatusMu.Unlock()
+	cfg.Alerts = AlertsConfig{Enabled: true, WebhookURL: "http://127.0.0.1:1/hook"}
+	recordAlertDelivery("down", Channel{ID: "game", Name: "Game"}, errors.New("webhook: request failed"))
+
+	r := httptest.NewRequest("GET", "/api/admin/alerts", nil)
+	r.Header.Set("X-Admin-Token", adminTok)
+	w := httptest.NewRecorder()
+	newHandler().ServeHTTP(w, r)
+	if w.Code != 200 {
+		t.Fatalf("status = %d body=%s", w.Code, w.Body.String())
+	}
+	var out struct {
+		Enabled      bool                 `json:"enabled"`
+		LastDelivery *AlertDeliveryStatus `json:"last_delivery"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &out); err != nil {
+		t.Fatal(err)
+	}
+	if out.LastDelivery == nil || out.LastDelivery.OK || out.LastDelivery.Event != "down" || out.LastDelivery.Error == "" {
+		t.Fatalf("last_delivery = %+v", out.LastDelivery)
 	}
 }

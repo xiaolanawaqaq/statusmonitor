@@ -171,6 +171,8 @@ curl -X POST -H "X-Admin-Token: $TOKEN" -H 'Content-Type: application/json' \
 
 接收端 ID：`webhook`、`telegram`、`dingtalk`、`feishu`、`wecom`、`discord`、`slack`、`bark`、`ntfy`。返回结构包含 `ok` 和 `results[]`（`receiver`、`name`、`ok`、可选 `error`）；部分失败返回 502，全成功返回 200，未配置／无效目标返回 400。
 
+`GET /api/admin/alerts` 还包含 `last_delivery`：最近一次自动告警的 `at`、`event`、`channel`、`ok` 和失败原因。进程重启后清空；手动测试发送不计入。后台的通知区域会直接显示这条记录，告警发送失败时不必再翻日志。
+
 ### 延迟通知行为
 
 延迟告警基于成功探测的 `latency_ms`（不使用 TTFT）：首次达到或超过阈值发送 `latency`，连续处于高延迟时不重复发送；降到阈值以下发送 `latency-recovered`。失败探测不会触发延迟恢复，仍走原有故障／恢复通知。延迟告警不改变可用率，也不创建故障事件。

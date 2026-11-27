@@ -572,7 +572,11 @@ func adminAlertReceivers(w http.ResponseWriter, r *http.Request) {
 	if !onlyMethod(w, r, http.MethodGet) {
 		return
 	}
-	writeJSON(w, 200, map[string]any{"enabled": cfg.Alerts.Enabled, "receivers": alertReceivers(cfg.Alerts)})
+	writeJSON(w, 200, map[string]any{
+		"enabled":       cfg.Alerts.Enabled,
+		"receivers":     alertReceivers(cfg.Alerts),
+		"last_delivery": lastAlertDelivery(),
+	})
 }
 
 func adminAlertTest(w http.ResponseWriter, r *http.Request) {

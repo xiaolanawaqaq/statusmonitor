@@ -220,3 +220,28 @@ func TestChannelSort(t *testing.T) {
 	defer s.Close()
 	check([]string{"b", "a"}, []int{1000, 5000})
 }
+
+func TestLastAlertDeliveryTracking(t *testing.T) {
+	alertStatusMu.Lock()
+	alertStatus = nil
+	alertStatusMu.Unlock()
+	if got := lastAlertDelivery(); got != nil {
+		t.Fatalf("initial status = %+v, want nil", got)
+	}
+	ch := Channel{ID: "game", Name: "Game"}
+	recordAlertDelivery("down", ch, errors.New("webhook: request failed"))
+	got := lastAlertDelivery()
+	if got == nil || got.OK || got.Event != "down" || got.Channel != "Game" || got.Error != "webhook: request failed" {
+		t.Fatalf("failure status = %+v", got)
+	}
+	recordAlertDelivery("recovered", ch, nil)
+	got = lastAlertDelivery()
+	if got == nil || !got.OK || got.Event != "recovered" || got.Error != "" {
+		t.Fatalf("success status = %+v", got)
+	}
+	// Callers must not be able to mutate the stored record through the returned pointer.
+	got.Event = "tampered"
+	if again := lastAlertDelivery(); again.Event != "recovered" {
+		t.Fatalf("stored status was mutated: %+v", again)
+	}
+}

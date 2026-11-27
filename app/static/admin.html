@@ -594,7 +594,11 @@ async function loadAlertReceivers() {
     if (requestSession !== session) return;
     if (!Array.isArray(data.receivers)) throw new Error("通知配置格式不正确");
     const configured = data.receivers.filter(r => r.configured);
-    $("#alert-receivers").textContent = `${data.enabled ? "告警已启用" : "告警总开关已关闭"} · 已配置：${configured.map(r => r.name).join("、") || "无"}`;
+    const last = data.last_delivery;
+    const delivery = last
+      ? ` · 最近告警：${last.ok ? "发送成功" : "发送失败"}（${esc(last.event)} · ${esc(last.channel)} · ${fmtTime(last.at)}${last.ok ? "" : ` · ${esc(last.error || "")}`}）`
+      : " · 尚无告警发送记录";
+    $("#alert-receivers").textContent = `${data.enabled ? "告警已启用" : "告警总开关已关闭"} · 已配置：${configured.map(r => r.name).join("、") || "无"}${delivery}`;
     $("#alert-receiver").replaceChildren(new Option("全部已配置接收端", ""), ...configured.map(r => new Option(r.name, r.id)));
     $("#alert-receiver").value = configured.some(r => r.id === selected) ? selected : "";
     $("#alert-test").disabled = !data.enabled || !configured.length;

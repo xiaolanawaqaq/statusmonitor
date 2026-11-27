@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -28,6 +29,40 @@ type AlertDelivery struct {
 	Name     string `json:"name"`
 	OK       bool   `json:"ok"`
 	Error    string `json:"error,omitempty"`
+}
+
+// AlertDeliveryStatus is the most recent automatic alert attempt, for operator visibility.
+type AlertDeliveryStatus struct {
+	At      int64  `json:"at"`
+	Event   string `json:"event"`
+	Channel string `json:"channel"`
+	OK      bool   `json:"ok"`
+	Error   string `json:"error,omitempty"`
+}
+
+var (
+	alertStatusMu sync.Mutex
+	alertStatus   *AlertDeliveryStatus
+)
+
+func recordAlertDelivery(event string, ch Channel, err error) {
+	st := &AlertDeliveryStatus{At: time.Now().Unix(), Event: event, Channel: ch.Name, OK: err == nil}
+	if err != nil {
+		st.Error = err.Error()
+	}
+	alertStatusMu.Lock()
+	alertStatus = st
+	alertStatusMu.Unlock()
+}
+
+func lastAlertDelivery() *AlertDeliveryStatus {
+	alertStatusMu.Lock()
+	defer alertStatusMu.Unlock()
+	if alertStatus == nil {
+		return nil
+	}
+	copied := *alertStatus
+	return &copied
 }
 
 func SendAlert(ctx context.Context, alerts AlertsConfig, event string, ch Channel, detail string) error {

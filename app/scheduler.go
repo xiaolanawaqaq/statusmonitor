@@ -204,12 +204,16 @@ func (s *Scheduler) probe(ctx context.Context, ch Channel) (ProbeResult, error) 
 	}
 	if s.cfg.Alerts.Enabled {
 		if event != "" {
-			if err := SendAlert(ctx, s.cfg.Alerts, event, ch, detail); err != nil {
+			err := SendAlert(ctx, s.cfg.Alerts, event, ch, detail)
+			recordAlertDelivery(event, ch, err)
+			if err != nil {
 				log.Printf("alert for %s failed: %v", ch.ID, err)
 			}
 		}
 		if latEvent != "" {
-			if err := SendAlert(ctx, s.cfg.Alerts, latEvent, ch, latDetail); err != nil {
+			err := SendAlert(ctx, s.cfg.Alerts, latEvent, ch, latDetail)
+			recordAlertDelivery(latEvent, ch, err)
+			if err != nil {
 				log.Printf("latency alert for %s failed: %v", ch.ID, err)
 			}
 		}
