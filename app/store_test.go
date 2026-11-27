@@ -546,3 +546,83 @@ func TestConfigErrorBackfill(t *testing.T) {
 		t.Fatalf("daily probes after second run = %d, want 1", probes)
 	}
 }
+
+func TestRepeatedConfigErrorsAreStoredOnce(t *testing.T) {
+	s := newTestStore(t)
+	for i := 0; i < 5; i++ {
+		if err := s.AddProbe("gpt", ProbeResult{Error: "missing API key", ConfigError: true}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	var rows int
+	if err := s.db.QueryRow(`SELECT COUNT(*) FROM probes WHERE channel_id = 'gpt' AND config_error = 1`).Scan(&rows); err != nil {
+		t.Fatal(err)
+	}
+	if rows != 1 {
+		t.Fatalf("identical config errors kept %d rows, want 1", rows)
+	}
+	// A different configuration problem is a distinct fact and gets its own row.
+	if err := s.AddProbe("gpt", ProbeResult{Error: "missing model", ConfigError: true}); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.db.QueryRow(`SELECT COUNT(*) FROM probes WHERE channel_id = 'gpt' AND config_error = 1`).Scan(&rows); err != nil {
+		t.Fatal(err)
+	}
+	if rows != 2 {
+		t.Fatalf("distinct config errors kept %d rows, want 2", rows)
+	}
+	// Real failures must never be collapsed.
+	for i := 0; i < 3; i++ {
+		if err := s.AddProbe("gpt", ProbeResult{Error: "connection refused"}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := s.db.QueryRow(`SELECT COUNT(*) FROM probes WHERE channel_id = 'gpt' AND config_error = 0`).Scan(&rows); err != nil {
+		t.Fatal(err)
+	}
+	if rows != 3 {
+		t.Fatalf("real failures kept %d rows, want 3", rows)
+	}
+}
+
+func TestPruneDuplicateConfigErrors(t *testing.T) {
+	s := newTestStore(t)
+	for i := 0; i < 4; i++ {
+		if _, err := s.db.Exec(`INSERT INTO probes (channel_id, ts, ok, error, config_error) VALUES ('gpt', ?, 0, 'missing API key', 1)`, int64(100+i)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := s.db.Exec(`INSERT INTO probes (channel_id, ts, ok, error, config_error) VALUES ('gpt', 200, 0, 'missing model', 1)`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.db.Exec(`DELETE FROM settings WHERE key = 'config_error_dedupe'`); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.pruneDuplicateConfigErrors(); err != nil {
+		t.Fatal(err)
+	}
+	var rows int
+	if err := s.db.QueryRow(`SELECT COUNT(*) FROM probes WHERE config_error = 1`).Scan(&rows); err != nil {
+		t.Fatal(err)
+	}
+	if rows != 2 {
+		t.Fatalf("rows after prune = %d, want 2", rows)
+	}
+	var ts int64
+	if err := s.db.QueryRow(`SELECT ts FROM probes WHERE error = 'missing API key'`).Scan(&ts); err != nil {
+		t.Fatal(err)
+	}
+	if ts != 103 {
+		t.Fatalf("kept row ts = %d, want the newest 103", ts)
+	}
+	// Must not prune twice into a different result.
+	if err := s.pruneDuplicateConfigErrors(); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.db.QueryRow(`SELECT COUNT(*) FROM probes WHERE config_error = 1`).Scan(&rows); err != nil {
+		t.Fatal(err)
+	}
+	if rows != 2 {
+		t.Fatalf("rows after second prune = %d, want 2", rows)
+	}
+}

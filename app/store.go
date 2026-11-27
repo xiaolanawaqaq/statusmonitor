@@ -154,6 +154,10 @@ func (s *Store) migrate() error {
 	if err := s.migrateConfigErrors(); err != nil {
 		return err
 	}
+	// 同一条配置错误可能已经堆积了成千上万行，只保留每个渠道最新的一条。
+	if err := s.pruneDuplicateConfigErrors(); err != nil {
+		return err
+	}
 	// 首次升级时用原始明细回填日汇总；已有汇总不覆盖。
 	if _, err := s.db.Exec(
 		`INSERT INTO daily_probe_stats (channel_id, day_ts, probes, ok_probes)
@@ -203,6 +207,32 @@ func (s *Store) migrateConfigErrors() error {
 		return err
 	}
 	if _, err := tx.Exec(`INSERT OR REPLACE INTO settings (key, value) VALUES ('config_error_backfill', '1')`); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+// pruneDuplicateConfigErrors keeps one row per channel and error message.
+func (s *Store) pruneDuplicateConfigErrors() error {
+	var done string
+	err := s.db.QueryRow(`SELECT value FROM settings WHERE key = 'config_error_dedupe'`).Scan(&done)
+	if err == nil {
+		return nil
+	}
+	if err != sql.ErrNoRows {
+		return err
+	}
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if _, err := tx.Exec(
+		`DELETE FROM probes WHERE config_error = 1 AND id NOT IN (
+		   SELECT MAX(id) FROM probes WHERE config_error = 1 GROUP BY channel_id, error)`); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(`INSERT OR REPLACE INTO settings (key, value) VALUES ('config_error_dedupe', '1')`); err != nil {
 		return err
 	}
 	return tx.Commit()
@@ -388,6 +418,22 @@ func (s *Store) addProbeWithMaintenance(channelID string, r ProbeResult, mainten
 		return err
 	}
 	defer tx.Rollback()
+	// 配置错误每次都完全相同：只保留一条并刷新时间，避免每次探测都堆一行。
+	if r.ConfigError && maintenanceID == nil {
+		res, err := tx.Exec(
+			`UPDATE probes SET ts = ? WHERE id = (
+			   SELECT id FROM probes WHERE channel_id = ? AND config_error = 1 AND error = ?
+			   ORDER BY id DESC LIMIT 1)`,
+			now, channelID, r.Error)
+		if err != nil {
+			return err
+		}
+		if n, err := res.RowsAffected(); err != nil {
+			return err
+		} else if n > 0 {
+			return tx.Commit()
+		}
+	}
 	if _, err := tx.Exec(
 		`INSERT INTO probes (channel_id, ts, ok, latency_ms, ttft_ms, status_code, error, players, max_players, config_error, maintenance_id)
 		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
