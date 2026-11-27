@@ -18,6 +18,7 @@ type Scheduler struct {
 	fails            map[string]int
 	oks              map[string]int
 	latHigh          map[string]bool
+	latSeed          map[string]bool
 	maintenanceEnded map[string]int64
 	nextDue          map[string]time.Time
 	running          map[string]bool
@@ -33,7 +34,7 @@ type Scheduler struct {
 func NewScheduler(store *Store, cfg Config) *Scheduler {
 	return &Scheduler{
 		store: store, cfg: cfg, fails: map[string]int{}, oks: map[string]int{},
-		latHigh: map[string]bool{}, maintenanceEnded: map[string]int64{},
+		latHigh: map[string]bool{}, latSeed: map[string]bool{}, maintenanceEnded: map[string]int64{},
 		nextDue: map[string]time.Time{}, running: map[string]bool{},
 		sem: make(chan struct{}, max(1, cfg.Probe.Concurrency)), done: make(chan struct{}),
 	}
@@ -101,6 +102,7 @@ func (s *Scheduler) Forget(id string) {
 	delete(s.fails, id)
 	delete(s.oks, id)
 	delete(s.latHigh, id)
+	delete(s.latSeed, id)
 	s.stateMu.Unlock()
 }
 
@@ -169,6 +171,11 @@ func (s *Scheduler) probe(ctx context.Context, ch Channel) (ProbeResult, error) 
 	if maintenance != nil {
 		maintenanceID = &maintenance.ID
 	}
+	// Restore the previous latency threshold state before this probe is stored,
+	// otherwise a restart re-emits latency alerts for every channel.
+	if err := s.seedLatency(ch.ID); err != nil {
+		log.Printf("restore latency state for %s: %v", ch.ID, err)
+	}
 	if err := s.store.addProbeWithMaintenance(ch.ID, result, maintenanceID); err != nil {
 		return result, err
 	}
@@ -229,6 +236,30 @@ func (s *Scheduler) resetAfterMaintenance(id string, now int64) error {
 		delete(s.oks, id)
 		delete(s.latHigh, id)
 		s.maintenanceEnded[id] = end
+	}
+	return nil
+}
+
+// seedLatency restores the high-latency state from the last stored probe so that
+// process restarts do not repeat alerts that were already delivered.
+func (s *Scheduler) seedLatency(id string) error {
+	s.stateMu.Lock()
+	defer s.stateMu.Unlock()
+	if _, seen := s.latSeed[id]; seen {
+		return nil
+	}
+	s.latSeed[id] = true
+	threshold := s.cfg.Alerts.LatencyThresholdMs
+	if threshold <= 0 {
+		return nil
+	}
+	lat, err := s.store.LastProbeLatency(id)
+	if err != nil {
+		delete(s.latSeed, id)
+		return err
+	}
+	if lat != nil {
+		s.latHigh[id] = *lat >= float64(threshold)
 	}
 	return nil
 }

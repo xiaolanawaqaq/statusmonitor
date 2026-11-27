@@ -54,6 +54,45 @@ func TestLatencyAlertsDisabled(t *testing.T) {
 	}
 }
 
+func TestLatencyAlertSurvivesRestart(t *testing.T) {
+	store := newTestStore(t)
+	var mu sync.Mutex
+	events := []string{}
+	receiver := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var payload AlertPayload
+		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+			t.Error(err)
+		}
+		mu.Lock()
+		events = append(events, payload.Event)
+		mu.Unlock()
+		w.WriteHeader(204)
+	}))
+	defer receiver.Close()
+	cfg := Config{
+		Probe:  ProbeConfig{IntervalSeconds: 60, TimeoutSeconds: 2, Concurrency: 1},
+		Alerts: AlertsConfig{Enabled: true, WebhookURL: receiver.URL, LatencyThresholdMs: 10, FailThreshold: 3, RecoverThreshold: 1},
+	}
+	ch := Channel{ID: "restart-test", Name: "Restart mock", Type: "mock", Config: map[string]any{"latency_ms": []any{40, 40}}}
+	if err := store.UpsertChannel(ch); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := NewScheduler(store, cfg).ProbeNow(context.Background(), ch); err != nil {
+		t.Fatal(err)
+	}
+	// A fresh scheduler stands in for a process restart: it must not repeat the alert
+	// that the previous instance already delivered.
+	if _, err := NewScheduler(store, cfg).ProbeNow(context.Background(), ch); err != nil {
+		t.Fatal(err)
+	}
+	mu.Lock()
+	got := append([]string{}, events...)
+	mu.Unlock()
+	if !reflect.DeepEqual(got, []string{"latency"}) {
+		t.Fatalf("events = %v, want one latency alert across restarts", got)
+	}
+}
+
 func TestLatencyAlertsThroughProbePipeline(t *testing.T) {
 	store := newTestStore(t)
 	var mu sync.Mutex

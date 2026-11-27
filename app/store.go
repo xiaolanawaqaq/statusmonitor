@@ -350,6 +350,21 @@ func (s *Store) addProbeWithMaintenance(channelID string, r ProbeResult, mainten
 	return tx.Commit()
 }
 
+// LastProbeLatency returns the latency of the newest successful probe, or nil when none exists.
+func (s *Store) LastProbeLatency(channelID string) (*float64, error) {
+	var lat sql.NullFloat64
+	err := s.db.QueryRow(`SELECT latency_ms FROM probes
+	 WHERE channel_id = ? AND ok = 1 AND latency_ms IS NOT NULL
+	 ORDER BY ts DESC, id DESC LIMIT 1`, channelID).Scan(&lat)
+	if err == sql.ErrNoRows || !lat.Valid {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &lat.Float64, nil
+}
+
 // ProbeStreak returns the trailing consecutive failures/successes from raw probes.
 func (s *Store) ProbeStreak(channelID string) (fails, oks int, err error) {
 	return s.probeStreakSince(channelID, 0)
