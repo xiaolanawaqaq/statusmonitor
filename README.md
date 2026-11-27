@@ -502,7 +502,7 @@ BACKUP_DIR=/mnt/backup ./backup.sh
   能反映 key 失效或余额不足。
 - 默认 `window=27000`（7.5 小时），和参考站一致；调大需要更多格子，前端自适应。
 - 想在公网暴露管理接口，请务必设置强随机 `ADMIN_TOKEN`，并按需在反向代理层限制 `/admin`。
-- 渠道 `config.api_key` 支持 `env:VAR`；若变量未设置，该渠道会记录为配置错误且不发起外部请求。
+- 渠道 `config.api_key` 支持 `env:VAR`；若变量未设置，该渠道会记录为配置错误且不发起外部请求。配置错误（缺少 url、key、host、model 或未知渠道类型）不会计入可用率、不会显示为故障、也不触发告警，状态页显示「无数据」；修好配置后按正常探测恢复。
 - HTTPS 建议用证书文件（Let's Encrypt 的 `fullchain.pem` + `privkey.pem`），
   反代终止 TLS 也行；此时不要把 `tls_cert` 填成反代证书。
 - `minecraft` 探测需要在服务器防火墙放行查询端口（和游戏端口相同）；`steam` 走 UDP 查询端口。

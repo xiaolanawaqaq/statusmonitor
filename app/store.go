@@ -139,10 +139,19 @@ func (s *Store) migrate() error {
 	if err := s.ensureColumn("probes", "max_players", "INTEGER"); err != nil {
 		return err
 	}
+	// 配置错误（缺少 url/key 等）不代表服务故障，需要和历史数据区分。
+	if err := s.ensureColumn("probes", "config_error", "INTEGER NOT NULL DEFAULT 0"); err != nil {
+		return err
+	}
 	if err := s.migrateDynamics(); err != nil {
 		return err
 	}
 	if err := s.migrateMaintenance(); err != nil {
+		return err
+	}
+	// 旧数据把"缺少 url/key 等配置问题"记成了失败。一次性标记出来，
+	// 否则升级后这些渠道的 90 天可用率仍然显示为 0%。
+	if err := s.migrateConfigErrors(); err != nil {
 		return err
 	}
 	// 首次升级时用原始明细回填日汇总；已有汇总不覆盖。
@@ -155,6 +164,48 @@ func (s *Store) migrate() error {
 		return err
 	}
 	return nil
+}
+
+// migrateConfigErrors backfills the config_error flag for rows written before it existed.
+func (s *Store) migrateConfigErrors() error {
+	var done string
+	err := s.db.QueryRow(`SELECT value FROM settings WHERE key = 'config_error_backfill'`).Scan(&done)
+	if err == nil {
+		return nil
+	}
+	if err != sql.ErrNoRows {
+		return err
+	}
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	for _, msg := range []string{
+		"missing url", "invalid HTTP request", "missing API key", "missing base_url", "missing model",
+		"invalid OpenAI request", "tcp channel requires host and port", "minecraft channel requires host and port",
+		"steam channel requires host and port", "udp channel requires host, port and send",
+		"icmp channel requires host", "dns channel requires host", "unknown channel type",
+	} {
+		if _, err := tx.Exec(
+			`UPDATE probes SET config_error = 1 WHERE ok = 0 AND error = ?`, msg); err != nil {
+			return err
+		}
+	}
+	// 这些行之前被计入了日汇总，现在减掉，保持历史可用率不因配置问题失真。
+	if _, err := tx.Exec(
+		`UPDATE daily_probe_stats SET probes = MAX(0, probes - (
+		   SELECT COUNT(*) FROM probes p
+		   WHERE p.channel_id = daily_probe_stats.channel_id
+		     AND (p.ts / ?) * ? = daily_probe_stats.day_ts
+		     AND p.config_error = 1))`,
+		daySeconds, daySeconds); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(`INSERT OR REPLACE INTO settings (key, value) VALUES ('config_error_backfill', '1')`); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 func (s *Store) ensureColumn(table, column, ddl string) error {
@@ -338,21 +389,24 @@ func (s *Store) addProbeWithMaintenance(channelID string, r ProbeResult, mainten
 	}
 	defer tx.Rollback()
 	if _, err := tx.Exec(
-		`INSERT INTO probes (channel_id, ts, ok, latency_ms, ttft_ms, status_code, error, players, max_players, maintenance_id)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		channelID, now, okInt, r.LatencyMs, r.TTFTMs, r.StatusCode, r.Error, r.Players, r.MaxPlayers, maintenanceID,
+		`INSERT INTO probes (channel_id, ts, ok, latency_ms, ttft_ms, status_code, error, players, max_players, config_error, maintenance_id)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		channelID, now, okInt, r.LatencyMs, r.TTFTMs, r.StatusCode, r.Error, r.Players, r.MaxPlayers, boolInt(r.ConfigError), maintenanceID,
 	); err != nil {
 		return err
 	}
-	if _, err := tx.Exec(
-		`INSERT INTO daily_probe_stats (channel_id, day_ts, probes, ok_probes)
-		 VALUES (?, ?, 1, ?)
-		 ON CONFLICT(channel_id, day_ts) DO UPDATE SET
-		   probes = probes + 1,
-		   ok_probes = ok_probes + excluded.ok_probes`,
-		channelID, (now/daySeconds)*daySeconds, okInt,
-	); err != nil {
-		return err
+	// 配置错误不进日汇总，否则 90 天历史会把未配置的渠道算成 0% 可用。
+	if !r.ConfigError {
+		if _, err := tx.Exec(
+			`INSERT INTO daily_probe_stats (channel_id, day_ts, probes, ok_probes)
+			 VALUES (?, ?, 1, ?)
+			 ON CONFLICT(channel_id, day_ts) DO UPDATE SET
+			   probes = probes + 1,
+			   ok_probes = ok_probes + excluded.ok_probes`,
+			channelID, (now/daySeconds)*daySeconds, okInt,
+		); err != nil {
+			return err
+		}
 	}
 	return tx.Commit()
 }
@@ -379,7 +433,9 @@ func (s *Store) ProbeStreak(channelID string) (fails, oks int, err error) {
 
 func (s *Store) probeStreakSince(channelID string, since int64) (fails, oks int, err error) {
 	rows, err := s.db.Query(
-		`SELECT ok, maintenance_id FROM probes WHERE channel_id = ? AND ts >= ? ORDER BY ts DESC, id DESC LIMIT 1000`, channelID, since)
+		`SELECT ok, maintenance_id FROM probes
+		 WHERE channel_id = ? AND ts >= ? AND config_error = 0
+		 ORDER BY ts DESC, id DESC LIMIT 1000`, channelID, since)
 	if err != nil {
 		return 0, 0, err
 	}
@@ -502,6 +558,7 @@ func (s *Store) Snapshot(windowSeconds int) (*StatusResponse, error) {
 	rows, err := s.db.Query(
 		`SELECT channel_id, (ts / ?) * ? AS bucket, COUNT(*) AS probes,
 		        SUM(ok) AS ok_probes,
+		        SUM(config_error) AS config_errors,
 		        SUM(CASE WHEN ok = 1 AND latency_ms IS NOT NULL THEN latency_ms END) AS lat_sum,
 		        COUNT(CASE WHEN ok = 1 AND latency_ms IS NOT NULL THEN 1 END) AS lat_n,
 		        SUM(CASE WHEN ok = 1 AND ttft_ms IS NOT NULL THEN ttft_ms END) AS ttft_sum,
@@ -517,15 +574,15 @@ func (s *Store) Snapshot(windowSeconds int) (*StatusResponse, error) {
 	defer rows.Close()
 
 	type aggRow struct {
-		probes, okProbes, latN, ttftN, playersN int
-		latSum, ttftSum, playersSum             sql.NullFloat64
+		probes, okProbes, configErrors, latN, ttftN, playersN int
+		latSum, ttftSum, playersSum                           sql.NullFloat64
 	}
 	agg := map[string]map[int64]aggRow{}
 	for rows.Next() {
 		var cid string
 		var bucket int64
 		var a aggRow
-		if err := rows.Scan(&cid, &bucket, &a.probes, &a.okProbes, &a.latSum, &a.latN, &a.ttftSum, &a.ttftN, &a.playersSum, &a.playersN); err != nil {
+		if err := rows.Scan(&cid, &bucket, &a.probes, &a.okProbes, &a.configErrors, &a.latSum, &a.latN, &a.ttftSum, &a.ttftN, &a.playersSum, &a.playersN); err != nil {
 			return nil, err
 		}
 		if agg[cid] == nil {
@@ -538,14 +595,15 @@ func (s *Store) Snapshot(windowSeconds int) (*StatusResponse, error) {
 	}
 
 	type latestProbe struct {
-		ts         int64
-		ok         bool
-		players    sql.NullInt64
-		maxPlayers sql.NullInt64
+		ts          int64
+		ok          bool
+		configError bool
+		players     sql.NullInt64
+		maxPlayers  sql.NullInt64
 	}
 	latest := map[string]latestProbe{}
 	latestRows, err := s.db.Query(
-		`SELECT p.channel_id, p.ts, p.ok, p.players, p.max_players FROM probes p
+		`SELECT p.channel_id, p.ts, p.ok, p.config_error, p.players, p.max_players FROM probes p
 		 JOIN (SELECT channel_id, MAX(id) AS id FROM probes GROUP BY channel_id) m ON p.id = m.id`)
 	if err != nil {
 		return nil, err
@@ -553,12 +611,13 @@ func (s *Store) Snapshot(windowSeconds int) (*StatusResponse, error) {
 	for latestRows.Next() {
 		var cid string
 		var lp latestProbe
-		var ok int
-		if err := latestRows.Scan(&cid, &lp.ts, &ok, &lp.players, &lp.maxPlayers); err != nil {
+		var ok, configError int
+		if err := latestRows.Scan(&cid, &lp.ts, &ok, &configError, &lp.players, &lp.maxPlayers); err != nil {
 			latestRows.Close()
 			return nil, err
 		}
 		lp.ok = ok == 1
+		lp.configError = configError == 1
 		latest[cid] = lp
 	}
 	if err := latestRows.Err(); err != nil {
@@ -608,11 +667,16 @@ func (s *Store) Snapshot(windowSeconds int) (*StatusResponse, error) {
 		for i := 0; i < count; i++ {
 			bts := first + int64(i)*bucketSeconds
 			a, has := agg[ch.ID][bts]
-			if !has || a.probes == 0 {
+			// 配置错误不是服务健康信号：单独剔除，避免把未配置的渠道画成故障。
+			real := 0
+			if has {
+				real = a.probes - a.configErrors
+			}
+			if !has || real <= 0 {
 				cs.Buckets = append(cs.Buckets, Bucket{TS: bts, Status: "nodata"})
 				continue
 			}
-			total += a.probes
+			total += real
 			okCount += a.okProbes
 			latN += a.latN
 			latSum += a.latSum.Float64
@@ -622,7 +686,7 @@ func (s *Store) Snapshot(windowSeconds int) (*StatusResponse, error) {
 				ttftSum += a.ttftSum.Float64
 			}
 			status := "down"
-			if a.okProbes == a.probes {
+			if a.okProbes == real {
 				status = "ok"
 			} else if a.okProbes > 0 {
 				status = "partial"
@@ -676,9 +740,13 @@ func (s *Store) Snapshot(windowSeconds int) (*StatusResponse, error) {
 				cs.MaxPlayers = &v
 			}
 			if now-ts <= staleAfter {
-				if lp.ok {
+				switch {
+				case lp.ok:
 					status = "ok"
-				} else {
+				case lp.configError:
+					// 未配置的渠道无法证明服务可用，但也不是故障，标成 nodata。
+					status = "nodata"
+				default:
 					status = "down"
 				}
 			}

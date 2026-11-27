@@ -297,12 +297,22 @@ func (s *Scheduler) updateState(ch Channel, result ProbeResult) (string, string,
 			return "", "", err
 		}
 		s.fails[ch.ID], s.oks[ch.ID] = fails, oks
+	} else if result.ConfigError {
+		// 配置错误既不算成功也不算失败，清空连续计数避免误开或误关事件。
+		s.fails[ch.ID], s.oks[ch.ID] = 0, 0
 	} else if result.OK {
 		s.fails[ch.ID] = 0
 		s.oks[ch.ID]++
 	} else {
 		s.oks[ch.ID] = 0
 		s.fails[ch.ID]++
+	}
+	if result.ConfigError {
+		// 无法判断服务健康时，自动事件不应保持打开；否则未配置的渠道会永久显示故障。
+		if err := s.store.ResolveIncident(ch.ID); err != nil {
+			return "", "", err
+		}
+		return "", "", nil
 	}
 	open, err := s.store.OpenIncidentFor(ch.ID)
 	if err != nil {

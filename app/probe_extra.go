@@ -130,7 +130,7 @@ func probeMinecraft(ctx context.Context, cfg map[string]any) ProbeResult {
 	host := cfgString(cfg, "host", "")
 	port := cfgInt(cfg, "port", 0)
 	if host == "" || port < 1 || port > 65535 {
-		return ProbeResult{Error: "minecraft channel requires host and port"}
+		return ProbeResult{Error: "minecraft channel requires host and port", ConfigError: true}
 	}
 	address := net.JoinHostPort(host, strconv.Itoa(port))
 
@@ -244,7 +244,7 @@ func probeSteam(ctx context.Context, cfg map[string]any) ProbeResult {
 	host := cfgString(cfg, "host", "")
 	port := cfgInt(cfg, "port", 0)
 	if host == "" || port < 1 || port > 65535 {
-		return ProbeResult{Error: "steam channel requires host and port"}
+		return ProbeResult{Error: "steam channel requires host and port", ConfigError: true}
 	}
 	address := net.JoinHostPort(host, strconv.Itoa(port))
 
@@ -330,7 +330,7 @@ func probeUDP(ctx context.Context, cfg map[string]any) ProbeResult {
 	send := unescape(cfgString(cfg, "send", ""))
 	expect := cfgString(cfg, "expect", "")
 	if host == "" || port < 1 || port > 65535 || send == "" {
-		return ProbeResult{Error: "udp channel requires host, port and send"}
+		return ProbeResult{Error: "udp channel requires host, port and send", ConfigError: true}
 	}
 	address := net.JoinHostPort(host, strconv.Itoa(port))
 
@@ -368,7 +368,7 @@ func probeUDP(ctx context.Context, cfg map[string]any) ProbeResult {
 func probeICMP(ctx context.Context, cfg map[string]any) ProbeResult {
 	host := cfgString(cfg, "host", "")
 	if host == "" {
-		return ProbeResult{Error: "icmp channel requires host"}
+		return ProbeResult{Error: "icmp channel requires host", ConfigError: true}
 	}
 	timeoutSec := 5
 	if deadline, ok := ctx.Deadline(); ok {
@@ -427,7 +427,7 @@ func probeDNS(ctx context.Context, cfg map[string]any) ProbeResult {
 	host := cfgString(cfg, "host", "")
 	expect := cfgString(cfg, "expect", "")
 	if host == "" {
-		return ProbeResult{Error: "dns channel requires host"}
+		return ProbeResult{Error: "dns channel requires host", ConfigError: true}
 	}
 	resolver := net.DefaultResolver
 	start := time.Now()

@@ -142,3 +142,45 @@ func TestLatencyAlertsThroughProbePipeline(t *testing.T) {
 		t.Fatalf("unexpected successful-probe statistics: %+v", snap.Channels[0])
 	}
 }
+
+func TestConfigErrorDoesNotOpenIncidentOrAlert(t *testing.T) {
+	store := newTestStore(t)
+	var mu sync.Mutex
+	var events []string
+	receiver := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var p AlertPayload
+		_ = json.NewDecoder(r.Body).Decode(&p)
+		mu.Lock()
+		events = append(events, p.Event)
+		mu.Unlock()
+		w.WriteHeader(204)
+	}))
+	defer receiver.Close()
+	cfg := Config{
+		Probe:  ProbeConfig{IntervalSeconds: 60, TimeoutSeconds: 2, Concurrency: 1},
+		Alerts: AlertsConfig{Enabled: true, WebhookURL: receiver.URL, LatencyThresholdMs: 5000, FailThreshold: 1, RecoverThreshold: 1},
+	}
+	s := NewScheduler(store, cfg)
+	ch := Channel{ID: "no-key", Name: "No key", Type: "openai", Config: map[string]any{"base_url": "https://example.invalid/v1", "model": "x"}}
+	if err := store.UpsertChannel(ch); err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i < 3; i++ {
+		result, err := s.ProbeNow(context.Background(), ch)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !result.ConfigError {
+			t.Fatalf("probe %d should be a config error: %+v", i, result)
+		}
+	}
+	if incs, err := store.Incidents(10); err != nil || len(incs) != 0 {
+		t.Fatalf("config errors must not open incidents: %+v %v", incs, err)
+	}
+	mu.Lock()
+	got := append([]string{}, events...)
+	mu.Unlock()
+	if len(got) != 0 {
+		t.Fatalf("config errors must not send alerts: %v", got)
+	}
+}

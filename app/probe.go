@@ -26,6 +26,9 @@ type ProbeResult struct {
 	Error      string   `json:"error"`
 	Players    *int     `json:"players,omitempty"`
 	MaxPlayers *int     `json:"max_players,omitempty"`
+	// ConfigError marks probes that never left the process because the channel
+	// is misconfigured; they are not evidence that the monitored service is down.
+	ConfigError bool `json:"config_error,omitempty"`
 }
 
 func f64(v float64) *float64 { return &v }
@@ -249,7 +252,7 @@ func ProbeChannel(ctx context.Context, ch Channel, timeout time.Duration) ProbeR
 	case "dns":
 		return probeDNS(ctx, cfg)
 	default:
-		return ProbeResult{Error: "unknown channel type"}
+		return ProbeResult{Error: "unknown channel type", ConfigError: true}
 	}
 }
 
@@ -280,12 +283,12 @@ func probeMock(ctx context.Context, cfg map[string]any) ProbeResult {
 func probeHTTP(ctx context.Context, cfg map[string]any) (result ProbeResult) {
 	url := cfgString(cfg, "url", "")
 	if url == "" {
-		return ProbeResult{Error: "missing url"}
+		return ProbeResult{Error: "missing url", ConfigError: true}
 	}
 	allowed := expectedHTTPStatuses(cfg)
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
-		return ProbeResult{Error: "invalid HTTP request"}
+		return ProbeResult{Error: "invalid HTTP request", ConfigError: true}
 	}
 	if headers, ok := cfg["headers"].(map[string]any); ok {
 		for k, v := range headers {
@@ -330,15 +333,15 @@ func probeHTTP(ctx context.Context, cfg map[string]any) (result ProbeResult) {
 func probeOpenAI(ctx context.Context, cfg map[string]any) (result ProbeResult) {
 	apiKey := cfgString(cfg, "api_key", "")
 	if strings.TrimSpace(apiKey) == "" {
-		return ProbeResult{Error: "missing API key"}
+		return ProbeResult{Error: "missing API key", ConfigError: true}
 	}
 	base := strings.TrimRight(cfgString(cfg, "base_url", ""), "/")
 	if base == "" {
-		return ProbeResult{Error: "missing base_url"}
+		return ProbeResult{Error: "missing base_url", ConfigError: true}
 	}
 	model := cfgString(cfg, "model", "")
 	if model == "" {
-		return ProbeResult{Error: "missing model"}
+		return ProbeResult{Error: "missing model", ConfigError: true}
 	}
 	url := base + "/chat/completions"
 	stream := cfgBool(cfg, "stream", true)
@@ -352,7 +355,7 @@ func probeOpenAI(ctx context.Context, cfg map[string]any) (result ProbeResult) {
 	body, _ := json.Marshal(payload)
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
 	if err != nil {
-		return ProbeResult{Error: "invalid OpenAI request"}
+		return ProbeResult{Error: "invalid OpenAI request", ConfigError: true}
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+apiKey)
@@ -470,7 +473,7 @@ func probeTCP(ctx context.Context, cfg map[string]any) ProbeResult {
 	host := cfgString(cfg, "host", "")
 	port := cfgInt(cfg, "port", 0)
 	if host == "" || port < 1 || port > 65535 {
-		return ProbeResult{Error: "tcp channel requires host and port"}
+		return ProbeResult{Error: "tcp channel requires host and port", ConfigError: true}
 	}
 	address := net.JoinHostPort(host, strconv.Itoa(port))
 	start := time.Now()

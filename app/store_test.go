@@ -447,3 +447,102 @@ func TestDisablingChannelResolvesOpenIncident(t *testing.T) {
 		t.Fatalf("resolved incident reopened on enable: %+v %v", open, err)
 	}
 }
+
+func TestConfigErrorsDoNotCountAsOutages(t *testing.T) {
+	s := newTestStore(t)
+	ch := Channel{ID: "gpt", Name: "GPT", Group: "GPT", Type: "openai", Config: map[string]any{}}
+	if err := s.UpsertChannel(ch); err != nil {
+		t.Fatal(err)
+	}
+	cfgErr := f64(0)
+	_ = cfgErr
+	for i := 0; i < 3; i++ {
+		if err := s.AddProbe("gpt", ProbeResult{Error: "missing API key", ConfigError: true}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	snap, err := s.Snapshot(27000)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cs := snap.Channels[0]
+	if cs.CurrentStatus != "nodata" {
+		t.Fatalf("config error status = %q, want nodata", cs.CurrentStatus)
+	}
+	if cs.Probes != 0 || cs.Availability != nil {
+		t.Fatalf("config errors must not add probes/availability: probes=%d avail=%v", cs.Probes, cs.Availability)
+	}
+	for _, b := range cs.Buckets {
+		if b.Status != "nodata" {
+			t.Fatalf("bucket status = %q, want nodata", b.Status)
+		}
+	}
+	// A real outage after the config is fixed must still be detected normally.
+	lat := f64(12)
+	if err := s.AddProbe("gpt", ProbeResult{OK: true, LatencyMs: lat, StatusCode: 200}); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.AddProbe("gpt", ProbeResult{Error: "connection refused"}); err != nil {
+		t.Fatal(err)
+	}
+	snap, err = s.Snapshot(27000)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cs = snap.Channels[0]
+	if cs.CurrentStatus != "down" {
+		t.Fatalf("real failure status = %q, want down", cs.CurrentStatus)
+	}
+	if cs.Probes != 2 || cs.Availability == nil || *cs.Availability != 50 {
+		t.Fatalf("real probes: probes=%d avail=%v", cs.Probes, cs.Availability)
+	}
+}
+
+func TestConfigErrorBackfill(t *testing.T) {
+	s := newTestStore(t)
+	now := s.now().Unix()
+	day := (now / daySeconds) * daySeconds
+	for i := 0; i < 3; i++ {
+		if _, err := s.db.Exec(`INSERT INTO probes (channel_id, ts, ok, error) VALUES ('gpt', ?, 0, 'missing API key')`, now-int64(i)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := s.db.Exec(`INSERT INTO probes (channel_id, ts, ok, error) VALUES ('gpt', ?, 0, 'connection refused')`, now-10); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.db.Exec(`INSERT INTO daily_probe_stats (channel_id, day_ts, probes, ok_probes) VALUES ('gpt', ?, 4, 0)`, day); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.db.Exec(`DELETE FROM settings WHERE key = 'config_error_backfill'`); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := s.migrateConfigErrors(); err != nil {
+		t.Fatal(err)
+	}
+	var marked int
+	if err := s.db.QueryRow(`SELECT COUNT(*) FROM probes WHERE config_error = 1`).Scan(&marked); err != nil {
+		t.Fatal(err)
+	}
+	if marked != 3 {
+		t.Fatalf("marked config errors = %d, want 3", marked)
+	}
+	var probes int
+	if err := s.db.QueryRow(`SELECT probes FROM daily_probe_stats WHERE channel_id = 'gpt'`).Scan(&probes); err != nil {
+		t.Fatal(err)
+	}
+	if probes != 1 {
+		t.Fatalf("daily probes = %d, want 1 (only the real failure)", probes)
+	}
+
+	// The backfill must not run twice and subtract the same rows again.
+	if err := s.migrateConfigErrors(); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.db.QueryRow(`SELECT probes FROM daily_probe_stats WHERE channel_id = 'gpt'`).Scan(&probes); err != nil {
+		t.Fatal(err)
+	}
+	if probes != 1 {
+		t.Fatalf("daily probes after second run = %d, want 1", probes)
+	}
+}
