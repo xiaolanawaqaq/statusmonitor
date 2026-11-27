@@ -411,6 +411,39 @@ func (s *Store) addProbeWithMaintenance(channelID string, r ProbeResult, mainten
 	return tx.Commit()
 }
 
+// ProbeHealth is the latest stored probe outcome for one channel.
+type ProbeHealth struct {
+	TS          int64
+	OK          bool
+	ConfigError bool
+	Error       string
+}
+
+// LatestProbeHealth returns the newest probe result per channel, for operator views.
+func (s *Store) LatestProbeHealth() (map[string]ProbeHealth, error) {
+	rows, err := s.db.Query(
+		`SELECT p.channel_id, p.ts, p.ok, p.config_error, COALESCE(p.error, '')
+		 FROM probes p
+		 JOIN (SELECT channel_id, MAX(id) AS id FROM probes GROUP BY channel_id) m ON p.id = m.id`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := map[string]ProbeHealth{}
+	for rows.Next() {
+		var cid string
+		var h ProbeHealth
+		var ok, configError int
+		if err := rows.Scan(&cid, &h.TS, &ok, &configError, &h.Error); err != nil {
+			return nil, err
+		}
+		h.OK = ok == 1
+		h.ConfigError = configError == 1
+		out[cid] = h
+	}
+	return out, rows.Err()
+}
+
 // LastProbeLatency returns the latency of the newest successful probe, or nil when none exists.
 func (s *Store) LastProbeLatency(channelID string) (*float64, error) {
 	var lat sql.NullFloat64

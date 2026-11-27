@@ -659,3 +659,27 @@ test('status refresh updates independent maintenance data and surfaces failures 
   assert.equal(ui.el('status-error').hidden, true);
   assert.equal(ui.el('maintenance-banners').children.length, 0);
 });
+
+test('channel list surfaces configuration errors and probe failures', async () => {
+  const ui = await boot();
+  ui.model.channels = [
+    { id: 'needs-key', name: 'GPT', group: 'AI', type: 'openai', enabled: true, sort: 1,
+      current_status: 'config_error', config_error: true, last_error: 'missing API key' },
+    { id: 'real-down', name: 'Game', group: '游戏', type: 'tcp', enabled: true, sort: 2,
+      current_status: 'down', config_error: false, last_error: 'connection refused' },
+    { id: 'healthy', name: 'Site', group: '站点', type: 'http', enabled: true, sort: 3,
+      current_status: 'ok', config_error: false },
+    { id: 'stopped', name: 'Old', group: '站点', type: 'http', enabled: false, sort: 4,
+      current_status: 'nodata' },
+  ];
+  ui.ctx.__list = ui.model.channels;
+  ui.run('renderChannels(__list)');
+  const html = ui.el('channels').innerHTML;
+  assert.match(html, /配置错误/);
+  assert.match(html, /missing API key/);
+  assert.match(html, /探测失败/);
+  assert.match(html, /探测正常/);
+  assert.match(html, /无数据/);
+  // A disabled channel keeps its "停用" badge and is not shown as healthy.
+  assert.match(html, /停用/);
+});

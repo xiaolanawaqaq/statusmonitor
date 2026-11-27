@@ -370,6 +370,14 @@ async function loadList(key, path, render) {
   }
 }
 
+function channelHealthTag(c) {
+  if (!c || !c.current_status) return "";
+  if (c.current_status === "config_error") return '<span class="tag bad" title="配置不完整，未发起探测">配置错误</span>';
+  if (c.current_status === "down") return '<span class="tag bad">探测失败</span>';
+  if (c.current_status === "ok") return '<span class="tag ok">探测正常</span>';
+  return '<span class="tag">无数据</span>';
+}
+
 function renderChannels(list) {
   channels = list;
   $("#panel-sub").textContent = `已登录 · ${list.length} 个渠道`;
@@ -378,7 +386,7 @@ function renderChannels(list) {
     ${list.map(c => `<tr>
       <td data-label="ID">${esc(c.id)}</td><td data-label="名称">${esc(c.name)}</td><td data-label="分组">${esc(c.group)}</td>
       <td data-label="类型"><div><span class="tag">${esc(c.type)}</span></div></td>
-      <td data-label="状态"><div><span class="tag ${c.enabled === false ? "bad" : "ok"}">${c.enabled === false ? "停用" : "启用"}</span><div class="help">#${c.sort || 0} · ${Number(c.config?.interval_seconds) > 0 ? `${esc(c.config.interval_seconds)} 秒` : "全局间隔"}</div></div></td>
+      <td data-label="状态"><div><span class="tag ${c.enabled === false ? "bad" : "ok"}">${c.enabled === false ? "停用" : "启用"}</span>${channelHealthTag(c)}<div class="help">#${c.sort || 0} · ${Number(c.config?.interval_seconds) > 0 ? `${esc(c.config.interval_seconds)} 秒` : "全局间隔"}${c.config_error && c.last_error ? ` · ${esc(c.last_error)}` : ""}</div></div></td>
       <td data-label="操作"><div class="actions">
         <button type="button" data-probe="${esc(c.id)}">立即探测</button>
         <button type="button" data-edit="${esc(c.id)}">编辑</button>

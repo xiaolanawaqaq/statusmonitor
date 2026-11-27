@@ -359,6 +359,14 @@ func handleAdmin(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// adminChannel 在渠道配置上附加最近一次探测结果，供后台直接看出配置错误。
+type adminChannel struct {
+	Channel
+	CurrentStatus string `json:"current_status"`
+	ConfigError   bool   `json:"config_error"`
+	LastError     string `json:"last_error,omitempty"`
+}
+
 func adminChannels(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
@@ -367,7 +375,29 @@ func adminChannels(w http.ResponseWriter, r *http.Request) {
 			serverError(w, err)
 			return
 		}
-		writeJSON(w, 200, chs)
+		health, err := store.LatestProbeHealth()
+		if err != nil {
+			serverError(w, err)
+			return
+		}
+		out := make([]adminChannel, 0, len(chs))
+		for _, ch := range chs {
+			ac := adminChannel{Channel: ch, CurrentStatus: "nodata"}
+			if h, ok := health[ch.ID]; ok {
+				ac.LastError = h.Error
+				ac.ConfigError = h.ConfigError
+				switch {
+				case h.ConfigError:
+					ac.CurrentStatus = "config_error"
+				case h.OK:
+					ac.CurrentStatus = "ok"
+				default:
+					ac.CurrentStatus = "down"
+				}
+			}
+			out = append(out, ac)
+		}
+		writeJSON(w, 200, out)
 	case http.MethodPost, http.MethodPut:
 		var ch Channel
 		if !readJSON(w, r, &ch) {

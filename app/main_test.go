@@ -207,3 +207,68 @@ func TestPublicAPIDisabled(t *testing.T) {
 		t.Fatalf("/api/status = %d", r2.StatusCode)
 	}
 }
+
+func TestAdminChannelsExposeConfigErrors(t *testing.T) {
+	oldCfg, oldStore := cfg, store
+	testStore, err := OpenStore(filepath.Join(t.TempDir(), "admin.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	store = testStore
+	t.Cleanup(func() {
+		testStore.Close()
+		cfg, store = oldCfg, oldStore
+	})
+	enabled := true
+	if _, err := testStore.SeedChannels([]Channel{
+		{ID: "configured", Name: "Configured", Type: "mock", Enabled: &enabled},
+		{ID: "broken", Name: "Broken", Type: "openai", Enabled: &enabled},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	lat := 10.0
+	if err := testStore.AddProbe("configured", ProbeResult{OK: true, LatencyMs: &lat}); err != nil {
+		t.Fatal(err)
+	}
+	if err := testStore.AddProbe("broken", ProbeResult{Error: "missing API key", ConfigError: true}); err != nil {
+		t.Fatal(err)
+	}
+	cfg = Config{Admin: AdminConfig{Token: "test-token"}}
+	oldTok := adminTok
+	adminTok = "test-token"
+	t.Cleanup(func() { adminTok = oldTok })
+
+	ts := httptest.NewServer(newHandler())
+	defer ts.Close()
+	req, _ := http.NewRequest("GET", ts.URL+"/api/admin/channels", nil)
+	req.Header.Set("Authorization", "Bearer test-token")
+	resp, err := ts.Client().Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != 200 {
+		t.Fatalf("status = %d", resp.StatusCode)
+	}
+	var rows []struct {
+		ID            string `json:"id"`
+		CurrentStatus string `json:"current_status"`
+		ConfigError   bool   `json:"config_error"`
+		LastError     string `json:"last_error"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&rows); err != nil {
+		t.Fatal(err)
+	}
+	byID := map[string]int{}
+	for i, r := range rows {
+		byID[r.ID] = i
+	}
+	broken := rows[byID["broken"]]
+	if broken.CurrentStatus != "config_error" || !broken.ConfigError || broken.LastError != "missing API key" {
+		t.Fatalf("broken channel = %+v", broken)
+	}
+	good := rows[byID["configured"]]
+	if good.CurrentStatus != "ok" || good.ConfigError {
+		t.Fatalf("configured channel = %+v", good)
+	}
+}
