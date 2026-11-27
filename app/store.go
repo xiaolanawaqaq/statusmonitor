@@ -490,6 +490,17 @@ func (s *Store) LatestProbeHealth() (map[string]ProbeHealth, error) {
 	return out, rows.Err()
 }
 
+// ProbeFreshness returns the newest probe timestamp and how many channels are enabled.
+func (s *Store) ProbeFreshness() (newest int64, enabled int, err error) {
+	if err := s.db.QueryRow(`SELECT COALESCE(MAX(ts), 0) FROM probes`).Scan(&newest); err != nil {
+		return 0, 0, err
+	}
+	if err := s.db.QueryRow(`SELECT COUNT(*) FROM channels WHERE enabled = 1`).Scan(&enabled); err != nil {
+		return 0, 0, err
+	}
+	return newest, enabled, nil
+}
+
 // LastProbeLatency returns the latency of the newest successful probe, or nil when none exists.
 func (s *Store) LastProbeLatency(channelID string) (*float64, error) {
 	var lat sql.NullFloat64

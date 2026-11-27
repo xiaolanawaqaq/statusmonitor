@@ -333,7 +333,7 @@ curl -X DELETE -H "X-Admin-Token: $TOKEN" localhost:8000/api/admin/dynamics/d1
 curl -X POST -H "X-Admin-Token: $TOKEN" localhost:8000/api/admin/alerts/test
 ```
 
-公开接口还有 `GET /api/incidents`（事件列表）和 `GET /api/health`（存活检查）。
+公开接口还有 `GET /api/incidents`（事件列表）和 `GET /api/health`（健康检查）。健康检查会返回 `last_probe_age_seconds` 和 `stale_after_seconds`；当调度器超过 `2×探测间隔+超时`（最少 60 秒）没有写入任何探测时返回 503，可用来发现「进程还活着但探测已停摆」的情况。启动后的第一个周期内不判定为异常，没有启用渠道时也不判定。
 
 ### 对外公开 API（/v1/*）
 

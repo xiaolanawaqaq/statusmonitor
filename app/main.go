@@ -32,6 +32,7 @@ var (
 	cfg       Config
 	adminTok  string
 	scheduler *Scheduler
+	startedAt time.Time
 )
 
 func main() {
@@ -78,6 +79,7 @@ func main() {
 	scheduler = NewScheduler(store, cfg)
 	scheduler.Start()
 	defer scheduler.Stop()
+	startedAt = time.Now()
 	server := &http.Server{
 		Handler: newHandler(), ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout: 10 * time.Second, IdleTimeout: 60 * time.Second,
@@ -179,7 +181,29 @@ func handleHealth(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, 503, "database unavailable")
 		return
 	}
-	writeJSON(w, 200, map[string]bool{"ok": true})
+	newest, enabled, err := store.ProbeFreshness()
+	if err != nil {
+		writeErr(w, 503, "database unavailable")
+		return
+	}
+	resp := map[string]any{"ok": true}
+	if enabled == 0 {
+		writeJSON(w, 200, resp)
+		return
+	}
+	threshold := int64(max(2*cfg.Probe.IntervalSeconds+cfg.Probe.TimeoutSeconds, 60))
+	age := time.Now().Unix() - newest
+	if newest > 0 {
+		resp["last_probe_age_seconds"] = age
+	}
+	resp["stale_after_seconds"] = threshold
+	// 刚启动时给调度器一个完整周期，避免把冷启动误判为探测停摆。
+	if !startedAt.IsZero() && time.Since(startedAt) > time.Duration(threshold)*time.Second && (newest == 0 || age > threshold) {
+		resp["ok"] = false
+		writeJSON(w, 503, resp)
+		return
+	}
+	writeJSON(w, 200, resp)
 }
 
 func writeJSON(w http.ResponseWriter, status int, v any) {

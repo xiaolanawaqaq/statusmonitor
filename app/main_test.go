@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 // setupPublicAPI 把全局 store/cfg 指到测试实例并返回 httptest 服务。
@@ -270,5 +271,68 @@ func TestAdminChannelsExposeConfigErrors(t *testing.T) {
 	good := rows[byID["configured"]]
 	if good.CurrentStatus != "ok" || good.ConfigError {
 		t.Fatalf("configured channel = %+v", good)
+	}
+}
+
+func TestHealthReflectsProbeFreshness(t *testing.T) {
+	ts := setupPublicAPI(t, APIConfig{})
+	oldStart := startedAt
+	startedAt = time.Now().Add(-time.Hour)
+	t.Cleanup(func() { startedAt = oldStart })
+
+	health := func() (int, map[string]any) {
+		t.Helper()
+		resp, err := ts.Client().Get(ts.URL + "/api/health")
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer resp.Body.Close()
+		var body map[string]any
+		if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+			t.Fatal(err)
+		}
+		return resp.StatusCode, body
+	}
+
+	if code, body := health(); code != 200 || body["ok"] != true {
+		t.Fatalf("fresh probe: %d %v", code, body)
+	}
+
+	// A monitor that stops writing probes must be reported as unhealthy.
+	if _, err := store.db.Exec(`UPDATE probes SET ts = ?`, time.Now().Add(-time.Hour).Unix()); err != nil {
+		t.Fatal(err)
+	}
+	code, body := health()
+	if code != 503 || body["ok"] != false {
+		t.Fatalf("stale probe: %d %v", code, body)
+	}
+	if _, ok := body["last_probe_age_seconds"]; !ok {
+		t.Fatalf("stale probe response lacks age: %v", body)
+	}
+
+	// With every channel disabled there is nothing to probe, so it is not unhealthy.
+	if _, err := store.db.Exec(`UPDATE channels SET enabled = 0`); err != nil {
+		t.Fatal(err)
+	}
+	if code, body := health(); code != 200 || body["ok"] != true {
+		t.Fatalf("no enabled channels: %d %v", code, body)
+	}
+}
+
+func TestHealthAllowsStartupGrace(t *testing.T) {
+	ts := setupPublicAPI(t, APIConfig{})
+	oldStart := startedAt
+	startedAt = time.Now()
+	t.Cleanup(func() { startedAt = oldStart })
+	if _, err := store.db.Exec(`UPDATE probes SET ts = ?`, time.Now().Add(-time.Hour).Unix()); err != nil {
+		t.Fatal(err)
+	}
+	resp, err := ts.Client().Get(ts.URL + "/api/health")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != 200 {
+		t.Fatalf("startup grace status = %d", resp.StatusCode)
 	}
 }
